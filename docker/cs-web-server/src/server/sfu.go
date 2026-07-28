@@ -219,17 +219,44 @@ func signalPeerConnections() { // nolint
 				}
 			}
 
+			// Offering is PER PEER: a failure here must not abandon the peers
+			// after this one in the slice.
+			//
+			// These three used to `return true`, which aborted the whole scan.
+			// One peer stuck mid-signalling — it got an offer and never answered,
+			// so it sits in `have-local-offer` and every later CreateOffer /
+			// SetLocalDescription on it fails — therefore blocked EVERY later
+			// joiner from receiving an offer at all. Not transiently: the retry
+			// below re-runs the same scan, hits the same peer, and aborts at the
+			// same place, forever. The only escape was that peer's WebSocket
+			// finally dying.
+			//
+			// Measured on a test container before this fix: peer A connects and
+			// stalls, peer B connects 5s later and receives nothing for its
+			// entire 60s life, while a lone peer gets its offer in 0.1s.
+			//
+			// Still sets tryAgain so a broken peer is retried, but `continue`
+			// means everyone else is served in this same pass.
 			offer, err := peerConnections[i].peerConnection.CreateOffer(nil)
 			if err != nil {
-				return true
+				log.Errorf("CreateOffer failed for peer %d: %v", i, err)
+				tryAgain = true
+
+				continue
 			}
 
 			if err = peerConnections[i].peerConnection.SetLocalDescription(offer); err != nil {
-				return true
+				log.Errorf("SetLocalDescription failed for peer %d: %v", i, err)
+				tryAgain = true
+
+				continue
 			}
 
 			if err = peerConnections[i].websocket.WriteJSON("offer", offer); err != nil {
-				return true
+				log.Errorf("Failed to send offer to peer %d: %v", i, err)
+				tryAgain = true
+
+				continue
 			}
 		}
 
