@@ -52,12 +52,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # --platform linux/386 is REQUIRED, not a detail.
+      #
+      # The Dockerfile never sets CGO_ENABLED; it only sets GOARCH=386. Upstream
+      # gets away with that because their docker-compose.yml declares
+      # `platform: linux/386`, so the golang stage itself runs as i386 — GOARCH
+      # then matches the host arch, Go treats it as a native build and enables
+      # cgo by default.
+      #
+      # Build without the flag and the same Dockerfile silently becomes a
+      # cross-compile (386 target on an amd64 host), Go defaults CGO_ENABLED=0,
+      # every `import "C"` file is dropped from the package, and the build dies
+      # with a pile of misleading "undefined: Packet / Addr / Xash3DNetwork"
+      # errors deep inside a dependency — nothing that points at cgo.
+      #
+      # 386 needs no qemu here: amd64 CPUs run 32-bit x86 natively.
+      #
       # Build context is the repo root: the Dockerfile COPYs paths like
       # `docker/cs-web-server/go.mod` and the pnpm workspace files at the top
       # level, so building from inside the docker/ directory fails.
       - name: Build
+        env:
+          DOCKER_BUILDKIT: '1'
         run: |
           docker build \
+            --platform linux/386 \
             --file docker/cs-web-server/Dockerfile \
             --tag "$IMAGE:${GITHUB_SHA::7}" \
             --tag "$IMAGE:latest" \
