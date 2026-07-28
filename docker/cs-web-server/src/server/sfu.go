@@ -50,12 +50,23 @@ func (n *SFUNet) SendTo(fd int, packet goxash3d_fwgs.Packet, flags int) int {
 	return nn
 }
 
+// SendToBatch delivers each packet independently.
+//
+// It used to `return -1` on the first failing peer, which DISCARDED every
+// remaining packet in the batch — packets addressed to perfectly healthy
+// players. One player closing their browser tab was therefore enough to starve
+// everyone else in the room: the game server keeps that player's slot for its
+// disconnect timeout (~60s), and during that whole window every outgoing batch
+// aborted at the dead peer. With several players leaving at once the room never
+// recovered and no one could join until the container was restarted.
+//
+// A failing peer now only loses its own packet.
 func (n *SFUNet) SendToBatch(fd int, packets []goxash3d_fwgs.Packet, flags int) int {
 	sum := 0
 	for _, packet := range packets {
 		nn := n.SendTo(fd, packet, flags)
 		if nn == -1 {
-			return -1
+			continue
 		}
 		sum += nn
 	}
@@ -93,6 +104,21 @@ type peerConnectionState struct {
 }
 
 const DefaultSignalsCount = 5
+
+const (
+	// Well under the ~60s idle window most NAT/firewall boxes use for TCP.
+	pingInterval = 20 * time.Second
+	// Deliberately six missed pings, not one or two.
+	//
+	// This deadline is the only change here that can kill a session the old
+	// code would have kept alive, so it is tuned to catch genuinely dead peers
+	// and nothing else. A tight value would turn any unforeseen problem with
+	// pong delivery into every player dropping on a timer — worse than the bug
+	// being fixed. When it does fire, the existing "Failed to read message"
+	// log line reports an i/o timeout, which is enough to diagnose from
+	// `docker logs`.
+	pongWait = 120 * time.Second
+)
 
 // Add to list of tracks and fire renegotation for all PeerConnections.
 func addTrack(t *webrtc.TrackRemote) *webrtc.TrackLocalStaticRTP { // nolint
@@ -142,14 +168,19 @@ func signalPeerConnections() { // nolint
 
 	attemptSync := func() (tryAgain bool) {
 		for i := range peerConnections {
-			if peerConnections[i].signalsCount <= 0 {
-				continue
-			}
-
+			// Prune closed peers FIRST. This check used to sit *after* the
+			// `signalsCount <= 0` guard below, so any peer that finished
+			// signalling — i.e. every successfully connected player — was
+			// skipped by `continue` and never removed from the global slice,
+			// even long after it closed.
 			if peerConnections[i].peerConnection.ConnectionState() == webrtc.PeerConnectionStateClosed {
 				peerConnections = append(peerConnections[:i], peerConnections[i+1:]...)
 
 				return true // We modified the slice, start from the beginning
+			}
+
+			if peerConnections[i].signalsCount <= 0 {
+				continue
 			}
 
 			// map of sender we already are seanding, so we don't double send
@@ -314,6 +345,11 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) { // nolint
 	index, _ := pool.TryGet()
 	ip[0] = index
 	defer pool.TryPut(index)
+	// Clear the routing entry when this peer goes away. Without it the dead
+	// writer stays in `connections` forever, so every later send to that index
+	// fails — and the index is recycled to a future player while still pointing
+	// at the old, closed data channel.
+	defer func() { connections[index] = nil }()
 
 	writeChannel, err := peerConnection.CreateDataChannel("write", &webrtc.DataChannelInit{
 		Ordered:        &f,
@@ -420,6 +456,52 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) { // nolint
 
 	// Signal for the new PeerConnection
 	signalPeerConnections()
+
+	// Keep the signalling socket alive.
+	//
+	// The whole game session dies with this WebSocket: when ReadMessage returns
+	// an error this handler exits and the deferred peerConnection.Close() tears
+	// down the data channels, even though WebRTC itself was perfectly healthy.
+	// After the handshake the socket goes completely idle for the rest of the
+	// match, so any middlebox that reaps idle TCP — home routers, mobile
+	// carriers, corporate firewalls, reverse proxies — silently kills the game.
+	// See upstream issue #30 ("Game freezes after few seconds when using nginx
+	// reverse proxy").
+	//
+	// A server-side ping is the right place for this: browsers answer ping
+	// frames automatically, so no client change is needed and older clients get
+	// the fix for free.
+	stopPing := make(chan struct{})
+	defer close(stopPing)
+	go func() {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopPing:
+				return
+			case <-ticker.C:
+				// WriteControl, not WriteMessage: gorilla allows only one
+				// concurrent writer and threadSafeWriter's mutex only guards
+				// WriteJSON, so a plain write from this goroutine could race the
+				// signalling writes. WriteControl is explicitly safe to call
+				// concurrently with every other method.
+				if err := c.WriteControl(
+					websocket.PingMessage, nil, time.Now().Add(10*time.Second),
+				); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// A peer that stops answering pings is gone; without a deadline the handler
+	// would block on ReadMessage forever and leak the peer, its pool index and
+	// its slot in the global list.
+	_ = c.SetReadDeadline(time.Now().Add(pongWait))
+	c.SetPongHandler(func(string) error {
+		return c.SetReadDeadline(time.Now().Add(pongWait))
+	})
 
 	message := &websocketMessage{}
 	for {
