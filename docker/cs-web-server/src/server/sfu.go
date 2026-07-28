@@ -38,13 +38,42 @@ func NewSFUNet() *SFUNet {
 	}
 }
 
+// sendComplain rate-limits the diagnostics below: SendTo runs per packet
+// (tens per second per player), so logging every failure would bury the box.
+var sendComplain [256]time.Time
+
+func complain(index byte, format string, args ...any) {
+	now := time.Now()
+	if now.Sub(sendComplain[index]) < 5*time.Second {
+		return
+	}
+	sendComplain[index] = now
+	log.Errorf(format, args...)
+}
+
 func (n *SFUNet) SendTo(fd int, packet goxash3d_fwgs.Packet, flags int) int {
-	conn := connections[packet.Addr.IP[0]]
+	index := packet.Addr.IP[0]
+	conn := connections[index]
+	// Both failures below used to be entirely silent, which made the worst
+	// production symptom impossible to diagnose: a player stops receiving game
+	// data while ICE, SCTP and the WebSocket all stay healthy, so every log and
+	// every server-side counter looks normal.
+	//
+	// Measured 2026-07-28: a peer that had been playing for 27 minutes went to
+	// exactly zero game bytes (only 30s SCTP heartbeats left, RTT 3ms) about 35
+	// seconds after ANOTHER peer opened its data channels, and never recovered.
+	// These two lines separate the two possible causes — if neither fires, the
+	// engine simply stopped addressing packets to that player and the fault is
+	// above the SFU.
 	if conn == nil {
+		complain(index, "SendTo: no connection for peer %d (routing entry lost)", index)
+
 		return -1
 	}
 	nn, err := conn.Write(packet.Data)
 	if err != nil {
+		complain(index, "SendTo: write failed for peer %d: %v", index, err)
+
 		return -1
 	}
 	return nn
@@ -377,6 +406,10 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) { // nolint
 	// fails — and the index is recycled to a future player while still pointing
 	// at the old, closed data channel.
 	defer func() { connections[index] = nil }()
+	// Without these the numeric peer index in the SendTo diagnostics cannot be
+	// tied to a person or to the join/leave timeline.
+	log.Errorf("peer %d: allocated", index)
+	defer log.Errorf("peer %d: released", index)
 
 	writeChannel, err := peerConnection.CreateDataChannel("write", &webrtc.DataChannelInit{
 		Ordered:        &f,
@@ -399,6 +432,7 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) { // nolint
 			panic(err)
 		}
 		connections[index] = d
+		log.Errorf("peer %d: routing live", index)
 
 		rc, err := peerConnection.CreateDataChannel("read", &webrtc.DataChannelInit{
 			Ordered:        &f,
