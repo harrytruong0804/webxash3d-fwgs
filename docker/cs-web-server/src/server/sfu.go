@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -36,6 +37,38 @@ func NewSFUNet() *SFUNet {
 			HostID:   3000,
 		}),
 	}
+}
+
+// sendStats counts what the engine actually asks us to deliver, per peer.
+//
+// Needed because logging only FAILURES cannot distinguish the two remaining
+// explanations for a player who silently stops receiving game data: either the
+// engine stopped addressing packets to them, or it kept sending and every write
+// reported success while nothing arrived. One says the fault is above the SFU,
+// the other says it is inside it.
+var sendStats [256]struct {
+	calls int64
+	bytes int64
+}
+
+func init() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			line := ""
+			for i := 0; i < 256; i++ {
+				c := atomic.SwapInt64(&sendStats[i].calls, 0)
+				b := atomic.SwapInt64(&sendStats[i].bytes, 0)
+				if c == 0 && connections[i] == nil {
+					continue
+				}
+				line += fmt.Sprintf(" p%d=%d/%dB", i, c, b)
+			}
+			if line != "" {
+				log.Errorf("sendrate:%s", line)
+			}
+		}
+	}()
 }
 
 // sendComplain rate-limits the diagnostics below: SendTo runs per packet
@@ -76,6 +109,8 @@ func (n *SFUNet) SendTo(fd int, packet goxash3d_fwgs.Packet, flags int) int {
 
 		return -1
 	}
+	atomic.AddInt64(&sendStats[index].calls, 1)
+	atomic.AddInt64(&sendStats[index].bytes, int64(nn))
 	return nn
 }
 
