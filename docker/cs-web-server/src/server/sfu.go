@@ -98,16 +98,32 @@ func (n *SFUNet) SendTo(fd int, packet goxash3d_fwgs.Packet, flags int) int {
 	// These two lines separate the two possible causes — if neither fires, the
 	// engine simply stopped addressing packets to that player and the fault is
 	// above the SFU.
+	/* KHÔNG trả -1 khi peer đã biến mất.
+	 *
+	 * Hàm này giả lập `sendto()` cho engine, và -1 nghĩa là SOCKET HỎNG. Nhưng
+	 * với UDP thật, gửi tới một peer đã rời đi không bao giờ lỗi — gói chỉ rơi
+	 * vào hư không. Trả -1 là nói dối engine rằng tầng mạng của nó chết, trong
+	 * khi thực tế chỉ là một người thoát.
+	 *
+	 * Đo 2026-07-29: hai người đang chơi, một người lag rồi văng, ngay sau đó
+	 * người còn lại ngừng nhận dữ liệu dù WebRTC của họ vẫn nguyên vẹn. Server
+	 * kẹt cho tới khi restart. Đây là nhánh cuối của họ lỗi "một người rời đi
+	 * làm hỏng người còn lại" — ba bản vá trước chặn ở tầng SFU, nhưng cái -1
+	 * này vẫn lọt xuống tận engine.
+	 *
+	 * Engine vẫn biết peer đã đi, qua `sv_timeout` — đúng cơ chế được thiết kế
+	 * cho việc đó, thay vì suy ra từ một lỗi socket giả.
+	 */
 	if conn == nil {
-		complain(index, "SendTo: no connection for peer %d (routing entry lost)", index)
+		complain(index, "SendTo: no connection for peer %d (da roi di, bo goi)", index)
 
-		return -1
+		return len(packet.Data)
 	}
 	nn, err := conn.Write(packet.Data)
 	if err != nil {
 		complain(index, "SendTo: write failed for peer %d: %v", index, err)
 
-		return -1
+		return len(packet.Data)
 	}
 	atomic.AddInt64(&sendStats[index].calls, 1)
 	atomic.AddInt64(&sendStats[index].bytes, int64(nn))
