@@ -51,6 +51,19 @@ var sendStats [256]struct {
 	bytes int64
 }
 
+// recvStats counts packets handed TO the engine (PushPacket in ReadLoop).
+//
+// Added after the 2026-07-31 05:52 incident: sendrate proved the engine stopped
+// ADDRESSING packets to all five players at once, but that left two suspects it
+// cannot tell apart — the bridge stopped delivering incoming packets (engine
+// starved, then timed everyone out), or delivery continued and the engine went
+// deaf on its own. recvrate is the other half: recv>0 while send=0 pins the
+// wedge inside the engine; recv=0 pins it in the bridge.
+var recvStats [256]struct {
+	calls int64
+	bytes int64
+}
+
 func init() {
 	go func() {
 		for {
@@ -66,6 +79,20 @@ func init() {
 			}
 			if line != "" {
 				log.Errorf("sendrate:%s", line)
+			}
+			line = ""
+			for i := 0; i < 256; i++ {
+				c := atomic.SwapInt64(&recvStats[i].calls, 0)
+				b := atomic.SwapInt64(&recvStats[i].bytes, 0)
+				// Same rule as sendrate: a LIVE peer at zero must be printed —
+				// the zeros are the whole point during a wedge.
+				if c == 0 && connections[i] == nil {
+					continue
+				}
+				line += fmt.Sprintf(" p%d=%d/%dB", i, c, b)
+			}
+			if line != "" {
+				log.Errorf("recvrate:%s", line)
 			}
 		}
 	}()
@@ -391,6 +418,8 @@ func ReadLoop(d io.Reader, ip [4]byte) {
 
 			return
 		}
+		atomic.AddInt64(&recvStats[ip[0]].calls, 1)
+		atomic.AddInt64(&recvStats[ip[0]].bytes, int64(n))
 		net.PushPacket(goxash3d_fwgs.Packet{
 			Addr: goxash3d_fwgs.Addr{
 				IP:   ip,
