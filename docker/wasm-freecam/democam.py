@@ -214,7 +214,19 @@ patch(
     "qboolean CL_DispatchUserMessage( const char *pszName, int iSize, void *pbuf )\n{\n\tint\ti;\n\n\tif( !COM_CheckString( pszName ))\n\t\treturn false;\n\n"
     "\tif( !Q_strcmp( pszName, \"DeathMsg\" ) && iSize >= 2 )\n"
     "\t\tCon_Printf( \"[HLKILL] killer=%d victim=%d\\n\", ((byte *)pbuf)[0], ((byte *)pbuf)[1] );\n",
-    "hook-deathmsg",
+    "hook-deathmsg-dispatch",
+)
+
+# Duong phat demo protocol 49 di qua CL_ParseUserMessage (CL_ParseServerMessage
+# -> svc_usermessage), KHONG qua CL_DispatchUserMessage. pbuf o day la byte[]
+# da byte-align (MSG_ReadBytes). Hook them o day moi bat duoc kill luc phat demo.
+patch(
+    "cl_parse.c",
+    "\tif( clgame.msg[i].func )\n\t{\n\t\tclgame.msg[i].func( clgame.msg[i].name, iSize, pbuf );\n",
+    "\tif( !Q_strcmp( clgame.msg[i].name, \"DeathMsg\" ) && iSize >= 2 )\n"
+    "\t\tCon_Printf( \"[HLKILL] killer=%d victim=%d\\n\", pbuf[0], pbuf[1] );\n\n"
+    "\tif( clgame.msg[i].func )\n\t{\n\t\tclgame.msg[i].func( clgame.msg[i].name, iSize, pbuf );\n",
+    "hook-deathmsg-parse",
 )
 
 print("democam.py: tat ca patch da ap")
