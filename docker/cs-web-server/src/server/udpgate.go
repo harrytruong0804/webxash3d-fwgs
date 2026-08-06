@@ -46,6 +46,24 @@ import (
 // đúng loại lỗi mà bản vá `connections[index] = nil` hồi 29/7 đã phải đi dọn.
 const udpGateIdle = 90 * time.Second
 
+// Tran toc do MOI PEER. Khong co no thi mot client UDP du don gian la chay
+// nhanh cung lam nghen ca server.
+//
+// Do that 2026-08-06: client xash chay khong man hinh (renderer rong, khong
+// vsync) ban 26.000-30.000 goi/giay thay vi ~30. Cau noi Go<->engine rut goi
+// tung cai mot co Delay() nen thong luong co han; hang doi 128 khe day ngay,
+// engine ngung tra loi TAT CA — ke ca goi info tu mot dia chi khac — va khong
+// tu hoi phuc sau khi client do bien mat. Ghim CPU container xuong 5% van con
+// 1.100 goi/giay va van du lam nghen.
+//
+// 150/giay la ~5 lan nhip binh thuong cua mot nguoi choi (cl_cmdrate 30), du
+// rong cho client tu do lag ma van chan duoc bao goi. Netchan tu chiu duoc mat
+// goi — day chinh la thu no duoc thiet ke de xu ly.
+const (
+	udpGateRate  = 150.0 // goi/giay moi peer
+	udpGateBurst = 60.0  // cho phep don cuc ngan luc bat tay
+)
+
 // udpPeer đóng vai io.Writer để cắm vừa vào bảng `connections` mà SendTo dùng.
 // Nhờ vậy engine gửi cho client UDP y hệt cách nó gửi cho peer WebRTC, không có
 // nhánh rẽ nào trong đường truyền nóng.
@@ -65,6 +83,11 @@ type udpClient struct {
 	ip   [4]byte
 	seen time.Time
 	got  int
+
+	// Gao token cho tran toc do.
+	tokens   float64
+	refilled time.Time
+	dropped  int64
 }
 
 // min: Go cua image nay chua chac co ban dung sang generic built-in.
@@ -142,7 +165,29 @@ func runUDPGate() {
 			connections[index] = &udpPeer{conn: conn, addr: raddr}
 			log.Errorf("udpgate: peer %d = %s", index, key)
 		}
-		c.seen = time.Now()
+		now := time.Now()
+		if c.refilled.IsZero() {
+			c.refilled = now
+			c.tokens = udpGateBurst
+		}
+		c.tokens += now.Sub(c.refilled).Seconds() * udpGateRate
+		if c.tokens > udpGateBurst {
+			c.tokens = udpGateBurst
+		}
+		c.refilled = now
+		if c.tokens < 1 {
+			c.dropped++
+			// In thua thot: luc bao goi thi moi giay co hang chuc nghin lan
+			// vao day, log day du se chon box nhanh hon chinh cai bao goi.
+			if c.dropped%20000 == 1 {
+				log.Errorf("udpgate: peer %d vuot toc do, da bo %d goi", c.index, c.dropped)
+			}
+			c.seen = now
+			mu.Unlock()
+			continue
+		}
+		c.tokens--
+		c.seen = now
 		c.got++
 		ip := c.ip
 		nth := c.got
