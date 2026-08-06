@@ -202,4 +202,19 @@ for fn in ("CL_DemoCam_f", "CL_DemoCamNext_f", "CL_DemoCamPrev_f", "CL_DemoCamCh
 open(f"{ROOT}/cl_view.c", "w").write(v)
 print("  [bo-static] xong")
 
+# --- 4. Hook DeathMsg: in CHI SO ENTITY killer/victim khi phat demo ---
+# Map kill->entity phai theo chi so entity, KHONG theo ten (khach trung ten
+# duoc, server them "(1)"). DeathMsg trong demo bit-packed khong grep duoc, nhung
+# tai CL_DispatchUserMessage engine da giao payload BYTE-ALIGNED cho client dll.
+# In pbuf[0]=killer, pbuf[1]=victim (chi so client = chi so entity nguoi choi).
+# Worker doc dong [HLKILL] tu log luc phat -> map kill->entity mien nhiem trung ten.
+patch(
+    "cl_parse.c",
+    "qboolean CL_DispatchUserMessage( const char *pszName, int iSize, void *pbuf )\n{\n\tint\ti;\n\n\tif( !COM_CheckString( pszName ))\n\t\treturn false;\n",
+    "qboolean CL_DispatchUserMessage( const char *pszName, int iSize, void *pbuf )\n{\n\tint\ti;\n\n\tif( !COM_CheckString( pszName ))\n\t\treturn false;\n\n"
+    "\tif( !Q_strcmp( pszName, \"DeathMsg\" ) && iSize >= 2 )\n"
+    "\t\tCon_Printf( \"[HLKILL] killer=%d victim=%d\\n\", ((byte *)pbuf)[0], ((byte *)pbuf)[1] );\n",
+    "hook-deathmsg",
+)
+
 print("democam.py: tat ca patch da ap")
