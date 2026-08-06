@@ -1,0 +1,114 @@
+# Build the CSGA demo-recorder image: client xash chay khong man hinh.
+#
+# Rieng image vi image server build voi `waf -d` (dedicated) — co do loai han
+# code client, ma ghi demo lai la viec cua client. Image nay build cung nguon
+# nhung KHONG co `-d`.
+#
+# Separate from the two upstream workflows on purpose. Those push to yohimik's
+# Docker Hub using secrets this fork does not have, and they fire on
+# `cs-web-server@*` tags — a namespace we never push to, so they stay dormant
+# and we avoid conflicts when syncing upstream.
+#
+# Why CI at all instead of building locally: the image is linux/386 and the
+# engine stage compiles xash3d-fwgs from source with i386 multilib. The dev
+# machine is an ARM Mac without Docker, and every production box is 1 core /
+# 1 GB — none of them can build this. A GitHub x86_64 runner can.
+name: CSGA recorder image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/cs-web-server-rec/**'
+      - '.github/workflows/csga-recorder.yaml'
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cs-web-server-rec
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Long because the engine is compiled from source, not downloaded.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner ships ~25 GB of toolchains we do not use, and this build
+      # needs room for a Debian build-essential stage, a Go stage, a Node stage
+      # and a ~1.5 GB final image at once. Without this the build dies partway
+      # through with a confusing "no space left on device".
+      - name: Free disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h / | tail -1
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --platform linux/386 is REQUIRED, not a detail.
+      #
+      # The Dockerfile never sets CGO_ENABLED; it only sets GOARCH=386. Upstream
+      # gets away with that because their docker-compose.yml declares
+      # `platform: linux/386`, so the golang stage itself runs as i386 — GOARCH
+      # then matches the host arch, Go treats it as a native build and enables
+      # cgo by default.
+      #
+      # Build without the flag and the same Dockerfile silently becomes a
+      # cross-compile (386 target on an amd64 host), Go defaults CGO_ENABLED=0,
+      # every `import "C"` file is dropped from the package, and the build dies
+      # with a pile of misleading "undefined: Packet / Addr / Xash3DNetwork"
+      # errors deep inside a dependency — nothing that points at cgo.
+      #
+      # 386 needs no qemu here: amd64 CPUs run 32-bit x86 natively.
+      #
+      # Build context is the repo root: the Dockerfile COPYs paths like
+      # `docker/cs-web-server-rec/go.mod` and the pnpm workspace files at the top
+      # level, so building from inside the docker/ directory fails.
+      - name: Build
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          docker build \
+            --platform linux/386 \
+            --file docker/cs-web-server-rec/Dockerfile \
+            --tag "$IMAGE:${GITHUB_SHA::7}" \
+            --tag "$IMAGE:latest" \
+            .
+
+      # Two tags, both needed. The sha tag is what production actually runs:
+      # it names one exact build, so a rollback is a one-word change and there
+      # is never a question of which bits are on a box. `latest` is only a
+      # convenience pointer for whoever pulls next.
+      - name: Push
+        run: |
+          docker push "$IMAGE:${GITHUB_SHA::7}"
+          docker push "$IMAGE:latest"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Image pushed"
+            echo
+            echo '```'
+            echo "$IMAGE:${GITHUB_SHA::7}"
+            echo '```'
+            echo
+            echo "Pull on a server (needs a PAT with \`read:packages\` — the"
+            echo "package is private):"
+            echo
+            echo '```'
+            echo "echo \$GHCR_PAT | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin"
+            echo "docker pull $IMAGE:${GITHUB_SHA::7}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
