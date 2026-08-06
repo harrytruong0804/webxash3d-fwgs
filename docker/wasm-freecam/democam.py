@@ -72,6 +72,45 @@ static void CL_DemoCamStep( int dir )
 }
 static void CL_DemoCamNext_f( void ) { CL_DemoCamStep( +1 ); }
 static void CL_DemoCamPrev_f( void ) { CL_DemoCamStep( -1 ); }
+
+/* Bam nguoi choi theo TEN (tu log kill). cl.players[i] la slot i, entity i+1. */
+static void CL_DemoCamName_f( void )
+{
+	int i, n = cl.maxclients, wlen;
+	const char *want;
+
+	if( Cmd_Argc() < 2 )
+	{
+		Con_Printf( "democam_name <ten nguoi choi>\n" );
+		return;
+	}
+	want = Cmd_Args();   /* ca ten, ke ca co khoang trang: "chicken (2)" */
+	wlen = Q_strlen( want );
+
+	/* khop chinh xac truoc */
+	for( i = 0; i < n; i++ )
+	{
+		if( !cl.players[i].name[0] ) continue;
+		if( !Q_stricmp( cl.players[i].name, want ))
+		{
+			democam_target = i + 1;
+			Con_Printf( "democam -> %s (entity %i)\n", cl.players[i].name, democam_target );
+			return;
+		}
+	}
+	/* khop tien to */
+	for( i = 0; i < n; i++ )
+	{
+		if( !cl.players[i].name[0] ) continue;
+		if( wlen > 0 && !Q_strnicmp( cl.players[i].name, want, wlen ))
+		{
+			democam_target = i + 1;
+			Con_Printf( "democam -> %s (entity %i, khop tien to)\n", cl.players[i].name, democam_target );
+			return;
+		}
+	}
+	Con_Printf( "democam_name: khong thay '%s'\n", want );
+}
 static void CL_DemoCamChase_f( void )
 {
 	democam_chase = !democam_chase;
@@ -137,6 +176,7 @@ patch(
     '\tCmd_AddCommand ("fullupdate", NULL, "re-init HUD on start demo recording" );\n'
     '\tCmd_AddCommand ("democam", CL_DemoCam_f, "CSGA: bam nguoi choi khi phat demo" );\n'
     '\tCmd_AddCommand ("democam_next", CL_DemoCamNext_f, "CSGA: nguoi choi ke" );\n'
+    '\tCmd_AddCommand ("democam_name", CL_DemoCamName_f, "CSGA: bam nguoi choi theo ten" );\n'
     '\tCmd_AddCommand ("democam_prev", CL_DemoCamPrev_f, "CSGA: nguoi choi truoc" );\n'
     '\tCmd_AddCommand ("democam_chase", CL_DemoCamChase_f, "CSGA: bat/tat bam sau lung" );',
     "dang-lenh",
@@ -148,6 +188,7 @@ patch(
     "static void CL_InitLocal( void )\n{",
     "extern void CL_DemoCam_f( void );\n"
     "extern void CL_DemoCamNext_f( void );\n"
+    "extern void CL_DemoCamName_f( void );\n"
     "extern void CL_DemoCamPrev_f( void );\n"
     "extern void CL_DemoCamChase_f( void );\n\n"
     "static void CL_InitLocal( void )\n{",
@@ -156,7 +197,7 @@ patch(
 
 # Bo `static` khoi 4 ham lenh de cl_main.c linh duoc (van giu static cho bien).
 v = open(f"{ROOT}/cl_view.c").read()
-for fn in ("CL_DemoCam_f", "CL_DemoCamNext_f", "CL_DemoCamPrev_f", "CL_DemoCamChase_f"):
+for fn in ("CL_DemoCam_f", "CL_DemoCamNext_f", "CL_DemoCamPrev_f", "CL_DemoCamChase_f", "CL_DemoCamName_f"):
     v = v.replace(f"static void {fn}( void )", f"void {fn}( void )")
 open(f"{ROOT}/cl_view.c", "w").write(v)
 print("  [bo-static] xong")
