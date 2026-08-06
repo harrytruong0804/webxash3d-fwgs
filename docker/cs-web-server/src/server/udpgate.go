@@ -31,6 +31,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	goxash3d_fwgs "github.com/yohimik/goxash3d-fwgs/pkg"
@@ -63,6 +64,15 @@ type udpClient struct {
 	// giữa chừng là nó coi như một người hoàn toàn khác và bắt kết nối lại.
 	ip   [4]byte
 	seen time.Time
+	got  int
+}
+
+// min: Go cua image nay chua chac co ban dung sang generic built-in.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func runUDPGate() {
@@ -133,17 +143,41 @@ func runUDPGate() {
 			log.Errorf("udpgate: peer %d = %s", index, key)
 		}
 		c.seen = time.Now()
+		c.got++
 		ip := c.ip
+		nth := c.got
 		mu.Unlock()
+
+		// Đếm gói VÀO cho peer UDP, đối xứng với sendrate — không có nó thì khi
+		// engine ngừng trả lời (đo 2026-08-06: client xash nối vào là engine câm
+		// vĩnh viễn) không tách được "gói không tới engine" với "tới rồi mà
+		// engine không xử lý". Đúng bài học của recvrate hồi 31/7.
+		atomic.AddInt64(&recvStats[ip[0]].calls, 1)
+		atomic.AddInt64(&recvStats[ip[0]].bytes, int64(n))
+
+		// Vài gói đầu của mỗi peer in ra nguyên văn. Client xash bắt tay khác
+		// hẳn trình duyệt, mà chính lúc bắt tay là lúc engine tắc — cần biết
+		// gói cuối cùng nó nhận được là gói nào.
+		if nth <= 3 {
+			log.Errorf("udpgate: peer %d goi #%d (%dB): %q", ip[0], nth, n, string(buf[:min(n, 48)]))
+		}
 
 		// Sao chép: buf được dùng lại ngay vòng sau, mà gói đi vào hàng đợi và
 		// được engine đọc ở luồng khác, muộn hơn.
 		data := make([]byte, n)
 		copy(data, buf[:n])
 
+		// Hàng đợi giữa Go và engine chỉ có 128 khe. Nếu Enqueue kẹt ở đây thì
+		// thủ phạm là hàng đợi đầy (engine ngừng rút), còn nếu nó trả về ngay
+		// mà engine vẫn câm thì thủ phạm nằm trong engine — hai kết luận trái
+		// ngược, không đo thì chỉ có đoán.
+		t0 := time.Now()
 		net.PushPacket(goxash3d_fwgs.Packet{
 			Addr: goxash3d_fwgs.Addr{IP: ip, Port: 1000},
 			Data: data,
 		})
+		if d := time.Since(t0); d > 50*time.Millisecond {
+			log.Errorf("udpgate: PushPacket ket %v (peer %d, goi #%d) — hang doi day", d, ip[0], nth)
+		}
 	}
 }
