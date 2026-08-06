@@ -141,14 +141,14 @@ index 1cc40aed..7955a19e 100644
  	Cmd_AddCommand ("drop", NULL, "drop current/specified item or weapon" );
  	Cmd_AddCommand ("gametitle", NULL, "show game logo" );
 diff --git a/engine/client/cl_parse.c b/engine/client/cl_parse.c
-index 990b56d1..264c53ca 100644
+index 990b56d1..f1ee9ff6 100644
 --- a/engine/client/cl_parse.c
 +++ b/engine/client/cl_parse.c
 @@ -2300,6 +2300,9 @@ qboolean CL_DispatchUserMessage( const char *pszName, int iSize, void *pbuf )
  	if( !COM_CheckString( pszName ))
  		return false;
  
-+	if( !Q_strcmp( pszName, "DeathMsg" ) && iSize >= 2 )
++	if( cls.demoplayback && !Q_strcmp( pszName, "DeathMsg" ) && iSize >= 2 )
 +		Con_Printf( "[HLKILL] killer=%d victim=%d\n", ((byte *)pbuf)[0], ((byte *)pbuf)[1] );
 +
  	for( i = 0; i < MAX_USER_MESSAGES; i++ )
@@ -158,7 +158,7 @@ index 990b56d1..264c53ca 100644
  			clgame.msg[i].name, iSize, clgame.msg[i].number );
  	}
  
-+	if( !Q_strcmp( clgame.msg[i].name, "DeathMsg" ) && iSize >= 2 )
++	if( cls.demoplayback && !Q_strcmp( clgame.msg[i].name, "DeathMsg" ) && iSize >= 2 )
 +		Con_Printf( "[HLKILL] killer=%d victim=%d\n", pbuf[0], pbuf[1] );
 +
  	if( clgame.msg[i].func )
