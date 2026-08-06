@@ -41,6 +41,11 @@ RUN grep -q 'CL_DemoInterpolateAngles();' engine/client/cl_pmove.c \
         engine/client/cl_pmove.c \
     && grep -n 'CSGA' engine/client/cl_pmove.c
 
+# Va 3: democam — camera tu do LAM O ENGINE (bo qua bo may khan gia client dll,
+# thu do khong dieu khien duoc luc phat demo). Xem democam.py.
+COPY docker/wasm-freecam/democam.py /tmp/democam.py
+RUN python3 /tmp/democam.py
+
 ENV EMCC_CFLAGS="-s USE_SDL=2"
 RUN emconfigure ./waf configure --emscripten && \
     emmake ./waf build && \
