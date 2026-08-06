@@ -44,8 +44,10 @@ def patch(path, find, replace, label):
 #        cuoi file cung duoc — de an toan, chen ngay truoc V_RenderView). ---
 DEMOCAM_CODE = r"""
 /* ==== CSGA democam: camera tu do khi phat demo (xem democam.py) ==== */
-static int democam_target = 0;   /* entity index nguoi dang bam; 0 = tat */
-static int democam_chase  = 0;   /* 1 = bam sau lung, 0 = goc nhin thu nhat */
+/* KHONG static: cl_frame.c extern sang de de banner spectator hien dung target
+ * (de iuser1/iuser2 vao clientdata truoc pfnTxferLocalOverrides). */
+int democam_target = 0;   /* entity index nguoi dang bam; 0 = tat */
+int democam_chase  = 0;   /* 1 = bam sau lung, 0 = goc nhin thu nhat */
 
 static void CL_DemoCam_f( void )
 {
@@ -227,6 +229,83 @@ patch(
     "\t\tCon_Printf( \"[HLKILL] killer=%d victim=%d\\n\", pbuf[0], pbuf[1] );\n\n"
     "\tif( clgame.msg[i].func )\n\t{\n\t\tclgame.msg[i].func( clgame.msg[i].name, iSize, pbuf );\n",
     "hook-deathmsg-parse",
+)
+
+# --- 5. Banner spectator hien DUNG target cua democam ---
+# Client dll (HL SDK) set g_iUser1/2 tu clientdata trong HUD_TxferLocalOverrides;
+# democam chi de camera nen banner van hien target CU ma recorder bam luc ghi
+# ("chicken (100)" trong khi cam da sang nguoi khac — bug user bao 2026-08-06).
+# De iuser1 (2=chase/4=in-eye) + iuser2 (target) vao clientdata TRUOC cu goi do.
+patch(
+    "cl_frame.c",
+    "\t\tif( state->number == ( cl.playernum + 1 ))\n"
+    "\t\t\tclgame.dllFuncs.pfnTxferLocalOverrides( state, &frame->clientdata );\n",
+    "\t\tif( state->number == ( cl.playernum + 1 ))\n"
+    "\t\t{\n"
+    "\t\t\textern int democam_target, democam_chase;\n"
+    "\t\t\tif( cls.demoplayback && democam_target > 0 )\n"
+    "\t\t\t{\n"
+    "\t\t\t\tframe->clientdata.iuser1 = democam_chase ? 2 : 4;\n"
+    "\t\t\t\tframe->clientdata.iuser2 = democam_target;\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\t/* mau cua target neu demo co (entity_state.health); 0 = khong biet */\n"
+    "\t\t\t\t\tcl_entity_t *dte = CL_GetEntityByIndex( democam_target );\n"
+    "\t\t\t\t\tif( dte && dte->curstate.health > 0 )\n"
+    "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;\n"
+    "\n"
+    "\t\t\t\t\t/* Crosshair: client dll chi ve khi m_pWeapon duoc set boi usermessage\n"
+    "\t\t\t\t\t * CurWeapon — demo CHI chua CurWeapon cua nguoi recorder bam luc ghi\n"
+    "\t\t\t\t\t * (xem chicken co crosshair, xem nguoi khac thi khong — bug user bao).\n"
+    "\t\t\t\t\t * Tong hop CurWeapon tu p_ weaponmodel cua target (luon co trong demo). */\n"
+    "\t\t\t\t\tif( dte )\n"
+    "\t\t\t\t\t{\n"
+    "\t\t\t\t\t\tstatic int dc_last_ent, dc_last_wm = -1;\n"
+    "\t\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n"
+    "\t\t\t\t\t\tif( wm != dc_last_wm || democam_target != dc_last_ent )\n"
+    "\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\tstatic const struct { const char *p; byte id; } dc_wtbl[] = {\n"
+    "\t\t\t\t\t\t\t\t{\"p_p228\",1},{\"p_scout\",3},{\"p_hegrenade\",4},{\"p_xm1014\",5},\n"
+    "\t\t\t\t\t\t\t\t{\"p_c4\",6},{\"p_mac10\",7},{\"p_aug\",8},{\"p_smokegrenade\",9},\n"
+    "\t\t\t\t\t\t\t\t{\"p_elite\",10},{\"p_fiveseven\",11},{\"p_ump45\",12},{\"p_sg550\",13},\n"
+    "\t\t\t\t\t\t\t\t{\"p_galil\",14},{\"p_famas\",15},{\"p_usp\",16},{\"p_glock18\",17},\n"
+    "\t\t\t\t\t\t\t\t{\"p_awp\",18},{\"p_mp5\",19},{\"p_m249\",20},{\"p_m3\",21},\n"
+    "\t\t\t\t\t\t\t\t{\"p_m4a1\",22},{\"p_tmp\",23},{\"p_g3sg1\",24},{\"p_flashbang\",25},\n"
+    "\t\t\t\t\t\t\t\t{\"p_deagle\",26},{\"p_sg552\",27},{\"p_ak47\",28},{\"p_knife\",29},\n"
+    "\t\t\t\t\t\t\t\t{\"p_p90\",30},\n"
+    "\t\t\t\t\t\t\t};\n"
+    "\t\t\t\t\t\t\tbyte wbuf[3] = { 0, 0, 0 };\n"
+    "\t\t\t\t\t\t\tmodel_t *pm = wm ? CL_ModelHandle( wm ) : NULL;\n"
+    "\t\t\t\t\t\t\tif( pm && pm->name[0] )\n"
+    "\t\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\t\tsize_t di;\n"
+    "\t\t\t\t\t\t\t\tfor( di = 0; di < sizeof( dc_wtbl ) / sizeof( dc_wtbl[0] ); di++ )\n"
+    "\t\t\t\t\t\t\t\t\tif( Q_strstr( pm->name, dc_wtbl[di].p )) { wbuf[0] = 1; wbuf[1] = dc_wtbl[di].id; wbuf[2] = 1; break; }\n"
+    "\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\t/* wm=0 (chet/khong sung) -> state 0: an crosshair, dung nhu that */\n"
+    "\t\t\t\t\t\t\tCL_DispatchUserMessage( \"CurWeapon\", 3, wbuf );\n"
+    "\t\t\t\t\t\t\tdc_last_ent = democam_target; dc_last_wm = wm;\n"
+    "\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t}\n"
+    "\t\t\t\t}\n"
+    "\t\t\t}\n"
+    "\t\t\tclgame.dllFuncs.pfnTxferLocalOverrides( state, &frame->clientdata );\n"
+    "\t\t}\n",
+    "banner-target",
+)
+
+# --- 6. In-eye NHUONG han cho client dll ---
+# Nho patch 5, g_iUser1=4/g_iUser2=target duoc bom moi khung -> bo may spectator
+# cua cs16-client TU dung in-eye chuan: goc noi suy muot + VE SUNG (viewmodel tu
+# weaponmodel trong entity state — demo luon co). Engine chi con de camera o che
+# do chase. (Truoc day in-eye engine-override: khong sung, goc soc — cung goc
+# loi voi banner: client dll khong biet dang spectate ai.)
+patch(
+    "cl_view.c",
+    "	if( !cls.demoplayback || democam_target <= 0 )\n\t\treturn;\n\tent = CL_GetEntityByIndex( democam_target );",
+    "	if( !cls.demoplayback || democam_target <= 0 )\n\t\treturn;\n"
+    "\tif( !democam_chase )\n\t\treturn;   /* in-eye: client dll lo (xem patch 5) */\n"
+    "\tent = CL_GetEntityByIndex( democam_target );",
+    "ineye-client-dll",
 )
 
 print("democam.py: tat ca patch da ap")
