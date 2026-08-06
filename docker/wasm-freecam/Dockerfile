@@ -29,22 +29,14 @@ WORKDIR /xash3d-fwgs
 RUN git clone --branch "$XASH_BRANCH" --single-branch "$XASH_REPO" . \
     && git submodule update --init --recursive
 
-# Va 1: cho client dll biet dang o che do chi xem.
-RUN grep -q 'return (cls.spectator != 0);' engine/client/cl_game.c \
-    && sed -i 's/return (cls.spectator != 0);/return (cls.spectator != 0) || cls.demoplayback;/' \
-        engine/client/cl_game.c \
-    && grep -n 'cls.demoplayback;' engine/client/cl_game.c
-
-# Va 2: khong khoa goc nhin khi xem lai.
-RUN grep -q 'CL_DemoInterpolateAngles();' engine/client/cl_pmove.c \
-    && sed -i 's|^\t\tCL_DemoInterpolateAngles();|\t\t; /* CSGA: bo khoa goc nhin de xoay tu do khi dung clip */|' \
-        engine/client/cl_pmove.c \
-    && grep -n 'CSGA' engine/client/cl_pmove.c
-
-# Va 3: democam — camera tu do LAM O ENGINE (bo qua bo may khan gia client dll,
-# thu do khong dieu khien duoc luc phat demo). Xem democam.py.
-COPY docker/wasm-freecam/democam.py /tmp/democam.py
-RUN python3 /tmp/democam.py
+# TOAN BO ban va client gop trong MOT file patch (xuat tu git diff cay build
+# da nghiem thu 2026-08-07). Truoc day la chuoi sed + democam.py — cang nhieu
+# buoc cang de lech nhau; patch la anh chup chinh xac cay da chay that.
+# Noi dung: IsSpectateOnly+demoplayback, bo khoa goc khi phat demo, democam
+# (+REC-skip), hook [HLKILL], dong bo spectator-state cho client dll (iuser/
+# CurWeapon/SetFOV/duck-speed-punch tu du lieu that cua server fork).
+COPY docker/wasm-freecam/csga-client.patch /tmp/csga-client.patch
+RUN git apply --check /tmp/csga-client.patch && git apply /tmp/csga-client.patch
 
 ENV EMCC_CFLAGS="-s USE_SDL=2"
 RUN emconfigure ./waf configure --emscripten && \

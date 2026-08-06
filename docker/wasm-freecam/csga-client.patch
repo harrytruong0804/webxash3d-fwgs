@@ -1,0 +1,324 @@
+diff --git a/engine/client/cl_frame.c b/engine/client/cl_frame.c
+index b0b66ad1..dba04d83 100644
+--- a/engine/client/cl_frame.c
++++ b/engine/client/cl_frame.c
+@@ -635,8 +635,95 @@ void CL_ProcessPacket( frame_t *frame )
+ 		ent->player = CL_IsPlayerIndex( state->number );
+ 
+ 		if( state->number == ( cl.playernum + 1 ))
++		{
++			extern int democam_target, democam_chase;
++			if( cls.demoplayback )
++			{
++				/* democam bat: de iuser cho client dll (banner/in-eye). Tat: giu
++				 * iuser goc cua demo. Ca hai truong hop deu synth CurWeapon cho
++				 * target dang xem — cam dau tien (chua democam) cung can crosshair. */
++				int dc_view = democam_target > 0 ? democam_target : frame->clientdata.iuser2;
++				cl_entity_t *dte = dc_view > 0 ? CL_GetEntityByIndex( dc_view ) : NULL;
++
++				if( democam_target > 0 )
++				{
++					frame->clientdata.iuser1 = democam_chase ? 2 : 4;
++					frame->clientdata.iuser2 = democam_target;
++					/* mau cua target neu demo co (entity_state.health); 0 = khong biet */
++					if( dte && dte->curstate.health > 0 )
++						frame->clientdata.health = dte->curstate.health;
++
++					/* Crosshair co/no theo TU THE target: g_iPlayerFlags cua client dll
++					 * an tu clientdata.flags qua duong prediction (da do: van chay khi
++					 * phat demo, flags=520 cua recorder — khong bao gio ngoi). Thay
++					 * bang tu the that: usehull==1 = dang ngoi -> crosshair thu nho. */
++					if( dte )
++					{
++						frame->clientdata.flags = ( frame->clientdata.flags & ~FL_DUCKING ) | FL_ONGROUND;
++						if( dte->curstate.usehull == 1 )
++							frame->clientdata.flags |= FL_DUCKING;
++
++						/* Du lieu THAT tu server (delta moi, serverfill dong fork):
++						 * velocity -> g_flPlayerSpeed (crosshair no khi chay),
++						 * vuser1 = punchangle (giat sung), fov = zoom AWP.
++						 * Demo cu chua co thi cac truong nay = 0 — vo hai. */
++						VectorCopy( dte->curstate.velocity, frame->clientdata.velocity );
++						VectorCopy( dte->curstate.vuser1, frame->clientdata.punchangle );
++						if( dte->curstate.fov > 0.0f )
++							frame->clientdata.fov = dte->curstate.fov;
++					}
++				}
++
++				/* Crosshair: client dll chi ve khi m_pWeapon duoc set boi usermessage
++				 * CurWeapon — demo CHI chua CurWeapon cua nguoi recorder bam luc ghi.
++				 * Tong hop CurWeapon tu p_ weaponmodel cua target (luon co trong demo). */
++				if( dte )
++				{
++					static int dc_last_ent, dc_last_wm = -1;
++					int wm = dte->curstate.weaponmodel;
++					if( wm != dc_last_wm || dc_view != dc_last_ent )
++					{
++						static const struct { const char *p; byte id; } dc_wtbl[] = {
++							{"p_p228",1},{"p_scout",3},{"p_hegrenade",4},{"p_xm1014",5},
++							{"p_c4",6},{"p_mac10",7},{"p_aug",8},{"p_smokegrenade",9},
++							{"p_elite",10},{"p_fiveseven",11},{"p_ump45",12},{"p_sg550",13},
++							{"p_galil",14},{"p_famas",15},{"p_usp",16},{"p_glock18",17},
++							{"p_awp",18},{"p_mp5",19},{"p_m249",20},{"p_m3",21},
++							{"p_m4a1",22},{"p_tmp",23},{"p_g3sg1",24},{"p_flashbang",25},
++							{"p_deagle",26},{"p_sg552",27},{"p_ak47",28},{"p_knife",29},
++							{"p_p90",30},
++						};
++						byte wbuf[3] = { 0, 0, 0 };
++						model_t *pm = wm ? CL_ModelHandle( wm ) : NULL;
++						if( pm && pm->name[0] )
++						{
++							size_t di;
++							for( di = 0; di < sizeof( dc_wtbl ) / sizeof( dc_wtbl[0] ); di++ )
++								if( Q_strstr( pm->name, dc_wtbl[di].p )) { wbuf[0] = 1; wbuf[1] = dc_wtbl[di].id; wbuf[2] = 1; break; }
++						}
++						/* wm=0 (chet/khong sung) -> state 0: an crosshair, dung nhu that */
++						CL_DispatchUserMessage( "CurWeapon", 3, wbuf );
++						dc_last_ent = dc_view; dc_last_wm = wm;
++					}
++					/* Zoom (AWP/Scout): client chi doi FOV qua usermessage SetFOV.
++					 * fov THAT nam trong state (serverfill) — synth khi doi. */
++					{
++						static int dc_last_fov = -1;
++						int fv = (int)dte->curstate.fov;
++						if( fv != dc_last_fov )
++						{
++							byte fbuf[1];
++							fbuf[0] = (byte)( fv > 0 && fv < 180 ? fv : 0 );
++							CL_DispatchUserMessage( "SetFOV", 1, fbuf );
++							dc_last_fov = fv;
++						}
++					}
++				}
++			}
+ 			clgame.dllFuncs.pfnTxferLocalOverrides( state, &frame->clientdata );
+ 
++		}
++
+ 		// shuffle states
+ 		ent->prevstate = ent->curstate;
+ 		ent->curstate = *state;
+diff --git a/engine/client/cl_game.c b/engine/client/cl_game.c
+index 215cef9c..c1cd267d 100644
+--- a/engine/client/cl_game.c
++++ b/engine/client/cl_game.c
+@@ -2310,7 +2310,7 @@ pfnIsSpectateOnly
+ */
+ static int GAME_EXPORT pfnIsSpectateOnly( void )
+ {
+-	return (cls.spectator != 0);
++	return (cls.spectator != 0) || cls.demoplayback;
+ }
+ 
+ /*
+diff --git a/engine/client/cl_main.c b/engine/client/cl_main.c
+index 1cc40aed..7955a19e 100644
+--- a/engine/client/cl_main.c
++++ b/engine/client/cl_main.c
+@@ -3323,6 +3323,12 @@ static void CL_ListMessages_f( void )
+ CL_InitLocal
+ =================
+ */
++extern void CL_DemoCam_f( void );
++extern void CL_DemoCamNext_f( void );
++extern void CL_DemoCamName_f( void );
++extern void CL_DemoCamPrev_f( void );
++extern void CL_DemoCamChase_f( void );
++
+ static void CL_InitLocal( void )
+ {
+ 	cls.state = ca_disconnected;
+@@ -3416,6 +3422,11 @@ static void CL_InitLocal( void )
+ 	Cmd_AddCommand ("noclip", NULL, "enable or disable no clipping mode" );
+ 	Cmd_AddCommand ("notarget", NULL, "notarget mode (monsters do not see you)" );
+ 	Cmd_AddCommand ("fullupdate", NULL, "re-init HUD on start demo recording" );
++	Cmd_AddCommand ("democam", CL_DemoCam_f, "CSGA: bam nguoi choi khi phat demo" );
++	Cmd_AddCommand ("democam_next", CL_DemoCamNext_f, "CSGA: nguoi choi ke" );
++	Cmd_AddCommand ("democam_name", CL_DemoCamName_f, "CSGA: bam nguoi choi theo ten" );
++	Cmd_AddCommand ("democam_prev", CL_DemoCamPrev_f, "CSGA: nguoi choi truoc" );
++	Cmd_AddCommand ("democam_chase", CL_DemoCamChase_f, "CSGA: bat/tat bam sau lung" );
+ 	Cmd_AddCommand ("give", NULL, "give specified item or weapon" );
+ 	Cmd_AddCommand ("drop", NULL, "drop current/specified item or weapon" );
+ 	Cmd_AddCommand ("gametitle", NULL, "show game logo" );
+diff --git a/engine/client/cl_parse.c b/engine/client/cl_parse.c
+index 990b56d1..264c53ca 100644
+--- a/engine/client/cl_parse.c
++++ b/engine/client/cl_parse.c
+@@ -2300,6 +2300,9 @@ qboolean CL_DispatchUserMessage( const char *pszName, int iSize, void *pbuf )
+ 	if( !COM_CheckString( pszName ))
+ 		return false;
+ 
++	if( !Q_strcmp( pszName, "DeathMsg" ) && iSize >= 2 )
++		Con_Printf( "[HLKILL] killer=%d victim=%d\n", ((byte *)pbuf)[0], ((byte *)pbuf)[1] );
++
+ 	for( i = 0; i < MAX_USER_MESSAGES; i++ )
+ 	{
+ 		// search for user message
+@@ -2392,6 +2395,9 @@ void CL_ParseUserMessage( sizebuf_t *msg, int svc_num, connprotocol_t proto )
+ 			clgame.msg[i].name, iSize, clgame.msg[i].number );
+ 	}
+ 
++	if( !Q_strcmp( clgame.msg[i].name, "DeathMsg" ) && iSize >= 2 )
++		Con_Printf( "[HLKILL] killer=%d victim=%d\n", pbuf[0], pbuf[1] );
++
+ 	if( clgame.msg[i].func )
+ 	{
+ 		clgame.msg[i].func( clgame.msg[i].name, iSize, pbuf );
+diff --git a/engine/client/cl_pmove.c b/engine/client/cl_pmove.c
+index 4630efa5..f4652ea6 100644
+--- a/engine/client/cl_pmove.c
++++ b/engine/client/cl_pmove.c
+@@ -1001,7 +1001,7 @@ void CL_PredictMovement( qboolean repredicting )
+ 		return;
+ 
+ 	if( cls.demoplayback && !repredicting )
+-		CL_DemoInterpolateAngles();
++		; /* CSGA: bo khoa goc nhin de xoay tu do khi dung clip */
+ 
+ 	CL_SetUpPlayerPrediction( false, false );
+ 
+diff --git a/engine/client/cl_view.c b/engine/client/cl_view.c
+index 0a35b734..f596b68a 100644
+--- a/engine/client/cl_view.c
++++ b/engine/client/cl_view.c
+@@ -366,6 +366,132 @@ V_RenderView
+ 
+ ==================
+ */
++
++/* ==== CSGA democam: camera tu do khi phat demo (xem democam.py) ==== */
++int democam_target = 0;   /* entity index nguoi dang bam; 0 = tat */
++int democam_chase  = 0;   /* 1 = bam sau lung, 0 = goc nhin thu nhat */
++
++void CL_DemoCam_f( void )
++{
++	if( Cmd_Argc() < 2 )
++	{
++		Con_Printf( "democam <entity#>  (0 = tat). Dang bam: %i\n", democam_target );
++		return;
++	}
++	democam_target = Q_atoi( Cmd_Argv( 1 ));
++	Con_Printf( "democam -> %i\n", democam_target );
++}
++
++static void CL_DemoCamStep( int dir )
++{
++	int i, n = cl.maxclients;
++	for( i = 0; i < n; i++ )
++	{
++		democam_target += dir;
++		if( democam_target < 1 ) democam_target = n;
++		if( democam_target > n ) democam_target = 1;
++		/* Bo qua CHINH may quay (local player cua demo — spectator REC):
++		 * khong co than the that, nhay vao la hinh vo. */
++		if( democam_target == cl.playernum + 1 ) continue;
++		cl_entity_t *e = CL_GetEntityByIndex( democam_target );
++		if( e && e->model ) { Con_Printf( "democam -> %i\n", democam_target ); return; }
++	}
++}
++void CL_DemoCamNext_f( void ) { CL_DemoCamStep( +1 ); }
++void CL_DemoCamPrev_f( void ) { CL_DemoCamStep( -1 ); }
++
++/* Bam nguoi choi theo TEN (tu log kill). cl.players[i] la slot i, entity i+1. */
++void CL_DemoCamName_f( void )
++{
++	int i, n = cl.maxclients, wlen;
++	const char *want;
++
++	if( Cmd_Argc() < 2 )
++	{
++		Con_Printf( "democam_name <ten nguoi choi>\n" );
++		return;
++	}
++	want = Cmd_Args();   /* ca ten, ke ca co khoang trang: "chicken (2)" */
++	wlen = Q_strlen( want );
++
++	/* khop chinh xac truoc */
++	for( i = 0; i < n; i++ )
++	{
++		if( !cl.players[i].name[0] ) continue;
++		if( !Q_stricmp( cl.players[i].name, want ))
++		{
++			democam_target = i + 1;
++			Con_Printf( "democam -> %s (entity %i)\n", cl.players[i].name, democam_target );
++			return;
++		}
++	}
++	/* khop tien to */
++	for( i = 0; i < n; i++ )
++	{
++		if( !cl.players[i].name[0] ) continue;
++		if( wlen > 0 && !Q_strnicmp( cl.players[i].name, want, wlen ))
++		{
++			democam_target = i + 1;
++			Con_Printf( "democam -> %s (entity %i, khop tien to)\n", cl.players[i].name, democam_target );
++			return;
++		}
++	}
++	Con_Printf( "democam_name: khong thay '%s'\n", want );
++}
++void CL_DemoCamChase_f( void )
++{
++	democam_chase = !democam_chase;
++	Con_Printf( "democam che do: %s\n", democam_chase ? "bam sau lung" : "goc nhin thu nhat" );
++}
++
++/* Ghi de vieworg/viewangles bang vi tri nguoi choi da chon. Goi NGAY sau
++ * pfnCalcRefdef trong V_RenderView. */
++static void CL_DemoCamApply( ref_params_t *rp )
++{
++	cl_entity_t	*ent;
++	vec3_t		org, ang, fwd;
++
++	if( !cls.demoplayback || democam_target <= 0 )
++		return;
++	ent = CL_GetEntityByIndex( democam_target );
++	if( !ent || !ent->model )
++		return;
++
++	/* In-eye: client dll tu dung (clientdata da duoc bom iuser1=4/iuser2 o
++	 * cl_frame.c) — goc noi suy + viewmodel sung nhu HLTV. Pitch: k=0 dung goc
++	 * ban sinh (angles ×-3); k khac 0 dung lai tu blending[1] (127=ngang),
++	 * kep ±40 do phong du lieu dong cung. */
++	/* Goc nhin: kenh `angles` DA du va chinh xac (server: angles[PITCH] =
++	 * -v_angle/3, yaw nguyen — sv_pmove.c) va client dll V_GetInEyePos tu dung
++	 * lai dung cong thuc do. KHONG de pitch/yaw nua (bai hoc: vuser2[0] ve 0
++	 * lam camera bi ep ngang — "lech len tren"). Chi CONG punchangle that
++	 * (vuser1, serverfill) vi duong spectator cua client dll khong tu cong. */
++	if( !democam_chase )
++	{
++		if( ent->curstate.vuser1[0] != 0.0f || ent->curstate.vuser1[1] != 0.0f )
++		{
++			rp->viewangles[PITCH] += ent->curstate.vuser1[0];
++			rp->viewangles[YAW] += ent->curstate.vuser1[1];
++		}
++		return;
++	}
++	ang[0] = ent->angles[0] * -3.0f;   /* chase: goc ban sinh (chinh xac) */
++	ang[1] = ent->angles[1];
++	ang[2] = 0.0f;
++
++	VectorCopy( ent->origin, org );
++	ang[1] = ent->angles[1];
++	ang[2] = 0.0f;
++
++	AngleVectors( ang, fwd, NULL, NULL );
++	VectorMA( org, -112.0f, fwd, org );   /* lui sau 112 don vi */
++	org[2] += 24.0f;
++
++	VectorCopy( org, rp->vieworg );
++	VectorCopy( ang, rp->viewangles );
++}
++/* ==== het democam ==== */
++
+ void V_RenderView( void )
+ {
+ 	// HACKHACK: make ref params static
+@@ -387,6 +513,7 @@ void V_RenderView( void )
+ 	do
+ 	{
+ 		clgame.dllFuncs.pfnCalcRefdef( &rp );
++		CL_DemoCamApply( &rp );
+ 		V_GetRefParams( &rp, &rvp );
+ 		V_RefApplyOverview( &rvp );
+ 
