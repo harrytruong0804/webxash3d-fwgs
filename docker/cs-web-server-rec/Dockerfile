@@ -23,7 +23,18 @@ ENV PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
 
 WORKDIR /xash
 
-RUN git clone --branch merged --single-branch https://github.com/yohimik/xash3d-fwgs . \
+# GHIM dung commit ma goi npm `xash3d-fwgs` cua client web duoc build tu do.
+#
+# Vi sao quan trong: demo do may ghi tao ra phai MO DUOC bang engine trong
+# trinh duyet (do la thu render clip). Do 2026-08-06: build tu nhanh `merged`
+# HEAD thi demo phat duoc ~10-15 giay roi dut, trong khi demo do chinh trinh
+# duyet ghi thi phat tron. Header giong nhau (IDEM ver=3) nen nhin file khong
+# thay gi sai — chi lech o noi dung khung.
+#
+# So commit lay tu chinh phien ban goi: "1.2.2+commit.7c58854".
+ARG ENGINE_COMMIT=7c58854
+RUN git clone https://github.com/FWGS/xash3d-fwgs . \
+    && git checkout $ENGINE_COMMIT \
     && git submodule update --init --recursive
 
 # KHONG co `-d`: can day du phan client. `--enable-all-renderers` de chac chan
@@ -48,7 +59,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 WORKDIR /cs
-RUN git clone --recursive --depth 1 --branch main https://github.com/yohimik/cs16-client.git .
+# Cung ly do: goi npm `cs16-client` la "0.1.2+commit.15278ca" tren repo Velaron.
+ARG CSCLIENT_COMMIT=15278ca
+RUN git clone https://github.com/Velaron/cs16-client.git . \
+    && git checkout $CSCLIENT_COMMIT \
+    && git submodule update --init --recursive
 # Chi can client: phan server (ReGameDLL/yapb) va menu da co san tu cay xash.
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SERVER=OFF -DBUILD_MAINUI=OFF \

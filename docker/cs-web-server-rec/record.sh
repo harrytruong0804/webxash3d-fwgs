@@ -43,7 +43,7 @@ echo "record.sh: client dll: $(ls /rec/cstrike/cl_dlls/ 2>/dev/null | tr '\n' ' 
 # pixel la dot CPU vo ich tren box 1 nhan.
 exec /rec/xash-client \
     -game cstrike \
-    -ref null \
+    -ref soft \
     -width 320 -height 240 \
     -noborder \
     "$@"
