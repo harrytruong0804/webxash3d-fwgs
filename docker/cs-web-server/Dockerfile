@@ -17,6 +17,12 @@ RUN git clone --branch merged --single-branch https://github.com/yohimik/xash3d-
 COPY docker/cs-web-server/stuffto.py /tmp/stuffto.py
 RUN python3 /tmp/stuffto.py
 
+# Server gui DU du lieu per-player (velocity/punch/v_angle/fov/health) + co
+# fullvis cho may ghi — replay doi camera sang bat ky ai khong phai suy dien.
+# Di kem patch delta.lst o stage hlds. Xem serverfill.py.
+COPY docker/cs-web-server/serverfill.py /tmp/serverfill.py
+RUN python3 /tmp/serverfill.py
+
 RUN ./waf configure -T release -d --enable-openmp && ./waf build
 
 FROM golang:1.25.1 AS go
@@ -55,6 +61,7 @@ RUN apt-get -y update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     unzip \
+    python3 \
     && apt-get -y clean
 
 USER xash
@@ -67,6 +74,11 @@ RUN curl -sLJO "$hlds_url" \
     && unzip "hlds_build_$hlds_build.zip" -d "/opt/xash/hlds_build_$hlds_build" \
     && cp -R "hlds_build_$hlds_build/hlds"/* xashds/ \
     && rm -rf "hlds_build_$hlds_build" "hlds_build_$hlds_build.zip"
+
+# Khai them truong per-player trong delta.lst (velocity/punch/v_angle/fov/health)
+# — nua config cua serverfill.py (stage engine). Xem deltapatch.py.
+COPY docker/cs-web-server/deltapatch.py /tmp/deltapatch.py
+RUN python3 /tmp/deltapatch.py
 
 # Fix warnings:
 # couldn't exec listip.cfg
