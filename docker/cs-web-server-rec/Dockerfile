@@ -35,6 +35,29 @@ RUN ./waf configure -T release --enable-openmp --enable-all-renderers && ./waf b
 RUN find build -maxdepth 3 -type f \( -name 'xash*' -o -name '*.so' \) -printf '%p\n'
 
 
+# client.so cua CS. KHONG dung duoc ban Valve trong goi HLDS: da thu 2026-08-06,
+# engine nap duoc roi sap ngay trong BuyPresetManager::Reset -> KeyValues::new
+# (client.so:buy_presets.cpp:151). Do la thu vien GoldSrc 2013, ABI khong khop
+# xash. cs16-client la ban viet lai ma nguon mo, va chinh la thu ma client web
+# dang chay — chi khac o day build ra i386 native thay vi wasm.
+FROM debian:trixie-slim AS csclient
+
+RUN dpkg --add-architecture i386
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates build-essential gcc-multilib g++-multilib cmake python3 \
+    && apt-get clean
+
+WORKDIR /cs
+RUN git clone --recursive --depth 1 --branch main https://github.com/yohimik/cs16-client.git .
+# Chi can client: phan server (ReGameDLL/yapb) va menu da co san tu cay xash.
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SERVER=OFF -DBUILD_MAINUI=OFF \
+        -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 \
+        -DCMAKE_INSTALL_PREFIX=/out \
+    && cmake --build build --target install -j"$(nproc)"
+RUN find /out -type f -name '*.so' -printf '%p\n'
+
+
 FROM debian:trixie-slim AS hlds
 
 ARG hlds_build=8308
@@ -75,6 +98,8 @@ COPY --from=hlds /opt/xash/xashds .
 # Ca cay build, khong loc: duong dan .so doi giua cac ban waf, chep tron roi
 # tim luc chay thi de sua hon la doan sai rồi phai build lai 90 phut.
 COPY --from=engine /xash/build /engine-build
+# Cung ly do: khong doan duong dan cai dat cua cmake.
+COPY --from=csclient /out /csclient-out
 
 COPY docker/cs-web-server-rec/record.sh /rec/record.sh
 RUN chmod +x /rec/record.sh && chown -R xashrec:xashrec /rec
