@@ -78,6 +78,23 @@ patch(
     "apply-fullvis",
 )
 
+# --- 3b. fullvis phai xuyen qua CA game dll: AddToFullPack nhan pset va TU cat
+# them mot lan (ENGINE_CHECK_VISIBILITY). pfnCheckVisibility voi pset=NULL tra 1
+# (sv_game.c: "vis not set - fullvis enabled") -> dua NULL la thay het. Thieu
+# buoc nay thi nguoi ngoai PVS cua REC van dong cung (bug user bat 2026-08-07:
+# reset van, view nguoi chet dung im). ---
+patch(
+    "server/sv_frame.c",
+    "\t\tif( FBitSet( ent->v.effects, EF_REQUEST_PHS ))\n"
+    "\t\t\tpset = clientphs;\n"
+    "\t\telse pset = clientpvs;",
+    "\t\tif( FBitSet( ent->v.effects, EF_REQUEST_PHS ))\n"
+    "\t\t\tpset = clientphs;\n"
+    "\t\telse pset = clientpvs;\n\n"
+    "\t\tif( fullvis ) pset = NULL;\t// CSGA: xuyen ca lop cat cua game dll\n",
+    "fullvis-pset-null",
+)
+
 # --- 4. Do du lieu that vao entity_state cua player (cs.so khong tu do) ---
 patch(
     "server/sv_frame.c",
