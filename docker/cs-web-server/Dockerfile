@@ -11,6 +11,12 @@ WORKDIR /xash
 RUN git clone --branch merged --single-branch https://github.com/yohimik/xash3d-fwgs . \
     && git submodule update --init --recursive
 
+# Them lenh server `stuffto` — bao mot client chay mot lenh (svc_stufftext).
+# Can de bao may ghi (client) doi muc tieu `follow` giua tran; xem stuffto.py.
+# python3 co san vi waf can no.
+COPY docker/cs-web-server/stuffto.py /tmp/stuffto.py
+RUN python3 /tmp/stuffto.py
+
 RUN ./waf configure -T release -d --enable-openmp && ./waf build
 
 FROM golang:1.25.1 AS go
