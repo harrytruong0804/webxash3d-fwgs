@@ -848,6 +848,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		websocketHandler(w, r)
 	case "/config":
 		configHandler(w, r)
+	case "/control":
+		controlHandler(w, r)
 	default:
 		p := r.URL.Path
 		if r.URL.Path == "/" {
