@@ -58,6 +58,10 @@ void CSGA_OwnStore( const byte *b, int len )
 		return;
 	o = &csga_own[owner];
 	o->has = 1;
+	/* DEBUG tam (go sau khi chot khong gian chi so): doi chieu owner voi
+	 * [HLKILL] de bat lech chi so — bug trao du lieu A<->B user bat 8/8. */
+	if( cls.demoplayback )
+		Con_Printf( "[CSGAOWN] w=%d own=%d view=%d p0=%d p1=%d\n", which, owner, csga_own_view, p[0], len >= 2 ? p[1] : -1 );
 	switch( which )
 	{
 	case 1: if( len >= 3 ) { o->wstate = p[0]; o->wid = p[1]; o->clip = p[2]; } break;
