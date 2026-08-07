@@ -139,11 +139,10 @@ patch(
     '\t * nen khong bi chan o day. */\n'
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
-    '\t\t/* HideWeapon: gamedll GIAU viewmodel/crosshair cua spectator (co che\n'
-    '\t\t * observer ban dia). De lot la mat tay sung du CurWeapon dung — nghi\n'
-    '\t\t * pham #1 vu mat viewmodel 8/8. Demo: HUD do ta dieu khien, nuot not. */\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "HideWeapon" )))\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )))\n'
+    '\t/* KHONG nuot HideWeapon: no la CONG TAC bat/tat HUD chu khong phai du lieu\n'
+    '\t * per-player. Nuot ca goi = nuot luon lenh BO AN -> sung an vinh vien\n'
+    '\t * (do 8/8: nuot xong la mat tay sung ngay khi doi cam). */\n'
     '\t\treturn;\n',
     "own-consume",
 )
@@ -237,7 +236,7 @@ patch(
     "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n",
     "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n"
     "\t\t\t\t\t{\n"
-    "\t\t\t\t\t\tstatic int vm_last_wm = -1, vm_last_idx;\n"
+    "\t\t\t\t\t\tstatic int vm_last_wm = -1, vm_last_idx, vm_dbg_wm = -1;\n"
     "\t\t\t\t\t\tif( wm != vm_last_wm )\n"
     "\t\t\t\t\t\t{\n"
     "\t\t\t\t\t\t\tmodel_t *pm2 = wm ? CL_ModelHandle( wm ) : NULL;\n"
@@ -260,7 +259,16 @@ patch(
     "\t\t\t\t\t\t\t}\n"
     "\t\t\t\t\t\t\tvm_last_wm = wm;\n"
     "\t\t\t\t\t\t}\n"
-    "\t\t\t\t\t\tframe->clientdata.viewmodel = vm_last_idx;\n"
+    "\t\t\t\t\t\t/* CHI dat khi tim thay v_ model. Dat 0 la EP AN sung — te hon\n"
+    "\t\t\t\t\t\t * de dll tu lo (V_CalcSpectatorRefdef cua cs16-client cung map\n"
+    "\t\t\t\t\t\t * p_->v_ va se ve neu no tim duoc). */\n"
+    "\t\t\t\t\t\tif( vm_last_idx )\n"
+    "\t\t\t\t\t\t\tframe->clientdata.viewmodel = vm_last_idx;\n"
+    "\t\t\t\t\t\tif( wm != vm_dbg_wm )\n"
+    "\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\tvm_dbg_wm = wm;\n"
+    "\t\t\t\t\t\t\tCon_Printf( \"[VM] wm=%d -> vmidx=%d\\n\", wm, vm_last_idx );\n"
+    "\t\t\t\t\t\t}\n"
     "\t\t\t\t\t}\n",
     "own-viewmodel",
 )
