@@ -178,4 +178,22 @@ patch(
     "own-fallback",
 )
 
+# --- 5. Banner mau: bo chot ">0" — nguoi CHET phai ra (0) cua CHINH HO ---
+# Chot cu lam banner roi ve mau GOC trong demo (= mau nguoi may ghi bam LUC
+# GHI): user thay "zzzz (dem nguoc ve 0)" trong khi mau dang tut la cua Chicken.
+# Cung ho voi bug dan/tien khong nhan: moi duong fallback ve luong goc deu ro
+# du lieu nguoi khac. Gio democam bat la mau LUON theo nguoi dang xem, ke ca 0.
+patch(
+    "engine/client/cl_frame.c",
+    "\t\t\t\t\t/* mau cua target neu demo co (entity_state.health); 0 = khong biet */\n"
+    "\t\t\t\t\tif( dte && dte->curstate.health > 0 )\n"
+    "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;",
+    "\t\t\t\t\t/* mau LUON theo nguoi dang xem — ke ca 0 (chet). Chot \">0\" cu lam\n"
+    "\t\t\t\t\t * banner roi ve mau GOC (nguoi may ghi bam luc ghi) khi target chet:\n"
+    "\t\t\t\t\t * ten zzzz nhung mau dem cua Chicken (user bat 8/8). */\n"
+    "\t\t\t\t\tif( dte )\n"
+    "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;",
+    "own-health",
+)
+
 print("csga-own.py: tat ca patch da ap")
