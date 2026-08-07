@@ -22,6 +22,11 @@ RUN python3 /tmp/stuffto.py
 # Di kem patch delta.lst o stage hlds. Xem serverfill.py.
 COPY docker/cs-web-server/serverfill.py /tmp/serverfill.py
 RUN python3 /tmp/serverfill.py
+# Guong dan/giap/tien sang may ghi. Rieng biet voi serverfill.py vi khac han co
+# che: serverfill nhoi truong vao entity_state (doc duoc tu pev), con dan/tien
+# KHONG co trong pev — phai nhan ban ban tin MSG_ONE. Xem specmirror.py.
+COPY docker/cs-web-server/specmirror.py /tmp/specmirror.py
+RUN python3 /tmp/specmirror.py
 
 RUN ./waf configure -T release -d --enable-openmp && ./waf build
 
