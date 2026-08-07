@@ -37,6 +37,11 @@ RUN git clone --branch "$XASH_BRANCH" --single-branch "$XASH_REPO" . \
 # CurWeapon/SetFOV/duck-speed-punch tu du lieu that cua server fork).
 COPY docker/wasm-freecam/csga-client.patch /tmp/csga-client.patch
 RUN git apply --check /tmp/csga-client.patch && git apply /tmp/csga-client.patch
+# Doc ban tin CSGAOwn (dan/giap/tien moi nguoi tu server fork specmirror):
+# bang luu theo entity + phat lai khi democam doi nguoi. Anchor-replace kieu
+# python (nhu serverfill.py) de khong vo khi csga-client.patch xe dich.
+COPY docker/wasm-freecam/csga-own.py /tmp/csga-own.py
+RUN CSGA_ENGINE_ROOT=/xash3d-fwgs python3 /tmp/csga-own.py
 
 ENV EMCC_CFLAGS="-s USE_SDL=2"
 RUN emconfigure ./waf configure --emscripten && \
