@@ -181,23 +181,15 @@ patch(
     "own-fallback",
 )
 
-# --- 5. Banner mau: bo chot ">0" — nguoi CHET phai ra (0) cua CHINH HO ---
-# Chot cu lam banner roi ve mau GOC trong demo (= mau nguoi may ghi bam LUC
-# GHI): user thay "zzzz (dem nguoc ve 0)" trong khi mau dang tut la cua Chicken.
-# Cung ho voi bug dan/tien khong nhan: moi duong fallback ve luong goc deu ro
-# du lieu nguoi khac. Gio democam bat la mau LUON theo nguoi dang xem, ke ca 0.
-patch(
-    "engine/client/cl_frame.c",
-    "\t\t\t\t\t/* mau cua target neu demo co (entity_state.health); 0 = khong biet */\n"
-    "\t\t\t\t\tif( dte && dte->curstate.health > 0 )\n"
-    "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;",
-    "\t\t\t\t\t/* mau LUON theo nguoi dang xem — ke ca 0 (chet). Chot \">0\" cu lam\n"
-    "\t\t\t\t\t * banner roi ve mau GOC (nguoi may ghi bam luc ghi) khi target chet:\n"
-    "\t\t\t\t\t * ten zzzz nhung mau dem cua Chicken (user bat 8/8). */\n"
-    "\t\t\t\t\tif( dte )\n"
-    "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;",
-    "own-health",
-)
+# --- 5. (GO BO) Banner mau: TUYET DOI khong ghi cl.local.health = 0 ---
+# Ban truoc bo chot ">0" de banner theo nguoi xem. SAI NANG: entity_state.health
+# LUON = 0 trong demo (da do o ca #13 lan #16), ma engine/renderer an viewmodel +
+# crosshair bang dung idiom:
+#     if( cl.local.health <= 0 || cl.viewentity != cl.playernum + 1 ) return;
+# (thay o cl_game.c:875 CL_DrawCrosshair; renderer R_DrawViewModel giong het).
+# => copy health=0 la TU TAY an tay sung. Do chinh la hoi quy "mat tay sung khi
+# doi cam" user bat 8/8. Banner mau dung nguoi se giai bang duong KHAC: them
+# Health vao specmirror phia server (w=5) roi replay theo view.
 
 # --- 6. DEBUG tam: [DTE] moi giay — do hull/vel/hp/wm cua nguoi dang bam ---
 # Chot cau hoi crosshair di/ngoi: neu hull luon 0 va vel luon 0 thi du lieu
@@ -271,6 +263,24 @@ patch(
     "\t\t\t\t\t\t}\n"
     "\t\t\t\t\t}\n",
     "own-viewmodel",
+)
+
+# --- 8. DUCK: usehull cua nguoi dang bam, dat vao playerstate[playernum] ---
+# cl_pmove.c:1027 lay `cl.local.usehull = frame->playerstate[cl.playernum]
+# .usehull` — tuc tu the cua CHINH MAY GHI (khan gia bay, khong bao gio ngoi),
+# khong phai nguoi dang bam. Ban va cu chi dat clientdata.flags |= FL_DUCKING:
+# SAI TRUONG, dll khong bao gio thay => crosshair "ngoi to hon dung" (thuc ra
+# la khong phan ung gi, chay theo tu the may ghi).
+patch(
+    "engine/client/cl_frame.c",
+    "\t\t\t\t\t\tif( dte->curstate.usehull == 1 )\n"
+    "\t\t\t\t\t\t\tframe->clientdata.flags |= FL_DUCKING;\n",
+    "\t\t\t\t\t\tif( dte->curstate.usehull == 1 )\n"
+    "\t\t\t\t\t\t\tframe->clientdata.flags |= FL_DUCKING;\n"
+    "\t\t\t\t\t\t/* cl_pmove doc usehull tu playerstate cua MAY GHI — dat luon vao\n"
+    "\t\t\t\t\t\t * do thi cl.local.usehull moi mang tu the nguoi dang bam. */\n"
+    "\t\t\t\t\t\tframe->playerstate[cl.playernum].usehull = dte->curstate.usehull;\n",
+    "own-duck",
 )
 
 print("csga-own.py: tat ca patch da ap")
