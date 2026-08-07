@@ -125,7 +125,18 @@ patch(
     '\t{\n'
     '\t\tCSGA_OwnStore( pbuf, iSize );\n'
     '\t\treturn;\n'
-    '\t}\n',
+    '\t}\n'
+    '\n'
+    '\t/* Demo: NUOT bon ban tin dan/giap/tien KHONG nhan tu luong goc — chung la\n'
+    '\t * cua nguoi may ghi bam LUC GHI (duong live-mirror + clientdata cua chinh\n'
+    '\t * REC), phat len luc xem se DE len bang cua nguoi dang xem (bug user bat\n'
+    '\t * 8/8: dan/tien cua zzzz hien khi dang bam nguoi khac). Bang CSGAOwn la\n'
+    '\t * nguon DUY NHAT khi phat demo; synth cua ta di duong CL_DispatchUserMessage\n'
+    '\t * nen khong bi chan o day. */\n'
+    '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )))\n'
+    '\t\treturn;\n',
     "own-consume",
 )
 
