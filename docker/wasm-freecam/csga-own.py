@@ -139,7 +139,11 @@ patch(
     '\t * nen khong bi chan o day. */\n'
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )))\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
+    '\t\t/* HideWeapon: gamedll GIAU viewmodel/crosshair cua spectator (co che\n'
+    '\t\t * observer ban dia). De lot la mat tay sung du CurWeapon dung — nghi\n'
+    '\t\t * pham #1 vu mat viewmodel 8/8. Demo: HUD do ta dieu khien, nuot not. */\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "HideWeapon" )))\n'
     '\t\treturn;\n',
     "own-consume",
 )
@@ -194,6 +198,31 @@ patch(
     "\t\t\t\t\tif( dte )\n"
     "\t\t\t\t\t\tframe->clientdata.health = dte->curstate.health;",
     "own-health",
+)
+
+# --- 6. DEBUG tam: [DTE] moi giay — do hull/vel/hp/wm cua nguoi dang bam ---
+# Chot cau hoi crosshair di/ngoi: neu hull luon 0 va vel luon 0 thi du lieu
+# KHONG toi (delta/parse), con neu nhay dung thi loi nam o duong flags->dll.
+patch(
+    "engine/client/cl_frame.c",
+    "\t\t\t\tif( dte )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tstatic int dc_last_ent, dc_last_wm = -1;",
+    "\t\t\t\tif( dte )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tstatic float dc_dbg_t;\n"
+    "\t\t\t\t\tif( cl.time - dc_dbg_t > 1.0 )\n"
+    "\t\t\t\t\t{\n"
+    "\t\t\t\t\t\tdc_dbg_t = (float)cl.time;\n"
+    "\t\t\t\t\t\tCon_Printf( \"[DTE] e=%d hull=%d vel=%d hp=%d wm=%d\\n\", dc_view,\n"
+    "\t\t\t\t\t\t\tdte->curstate.usehull, (int)VectorLength( dte->curstate.velocity ),\n"
+    "\t\t\t\t\t\t\t(int)dte->curstate.health, dte->curstate.weaponmodel );\n"
+    "\t\t\t\t\t}\n"
+    "\t\t\t\t}\n"
+    "\t\t\t\tif( dte )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tstatic int dc_last_ent, dc_last_wm = -1;",
+    "own-dte-debug",
 )
 
 print("csga-own.py: tat ca patch da ap")
