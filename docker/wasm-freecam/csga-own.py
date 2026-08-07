@@ -42,19 +42,19 @@ patch(
     """CSGA_Own — bang dan/giap/tien theo entity (ban tin CSGAOwn tu server fork)
 ====================
 */
-typedef struct { byte has, wstate, wid, clip; byte ammo[64]; int battery, money; } csga_own_t;
+typedef struct { byte has, wstate, wid, clip; byte ammo[64]; int battery, money, health; } csga_own_t;
 static csga_own_t csga_own[65];
 static int csga_own_view;
 
 void CSGA_OwnStore( const byte *b, int len )
 {
-	static const char *nm[] = { "", "CurWeapon", "AmmoX", "Battery", "Money" };
+	static const char *nm[] = { "", "CurWeapon", "AmmoX", "Battery", "Money", "Health" };
 	int which = b[0], owner = b[1];
 	const byte *p = b + 2;
 	csga_own_t *o;
 
 	len -= 2;
-	if( owner < 1 || owner > 64 || which < 1 || which > 4 )
+	if( owner < 1 || owner > 64 || which < 1 || which > 5 )
 		return;
 	o = &csga_own[owner];
 	o->has = 1;
@@ -68,6 +68,7 @@ void CSGA_OwnStore( const byte *b, int len )
 	case 2: if( len >= 2 && p[0] < 64 ) o->ammo[p[0]] = p[1]; break;
 	case 3: if( len >= 1 ) o->battery = p[0] | ( len >= 2 ? p[1] << 8 : 0 ); break;
 	case 4: if( len >= 4 ) o->money = p[0] | ( p[1] << 8 ) | ( p[2] << 16 ) | ( p[3] << 24 ); break;
+	case 5: if( len >= 1 ) o->health = p[0]; break;
 	}
 	/* dang xem dung nguoi nay -> phat ban tin goc ngay, HUD cap nhat tuc thi */
 	if( owner == csga_own_view && cls.demoplayback )
@@ -100,6 +101,10 @@ void CSGA_OwnReplay( int ent )
 	b[0] = o->money & 0xff; b[1] = ( o->money >> 8 ) & 0xff;
 	b[2] = ( o->money >> 16 ) & 0xff; b[3] = ( o->money >> 24 ) & 0xff; b[4] = 1;
 	CL_DispatchUserMessage( "Money", 5, b );
+	/* Health cho BANNER spectator. KHONG dung de ghi cl.local.health — engine an
+	 * viewmodel+crosshair bang `cl.local.health <= 0` (hoi quy 8/8). */
+	b[0] = (byte)o->health;
+	CL_DispatchUserMessage( "Health", 1, b );
 }
 
 int CSGA_OwnHas( int ent )
@@ -139,7 +144,8 @@ patch(
     '\t * nen khong bi chan o day. */\n'
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )))\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Health" )))\n'
     '\t/* KHONG nuot HideWeapon: no la CONG TAC bat/tat HUD chu khong phai du lieu\n'
     '\t * per-player. Nuot ca goi = nuot luon lenh BO AN -> sung an vinh vien\n'
     '\t * (do 8/8: nuot xong la mat tay sung ngay khi doi cam). */\n'

@@ -57,7 +57,7 @@ patch(
     "static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float *pOrigin, edict_t *ed )\n{",
     "/* ==== CSGA: guong dan/giap/tien sang may ghi, co gan nhan chu so huu ==== */\n"
     "#define CSGA_OWN_SIZE\t16\t// [which][chi so nguoi][payload...] — CO DINH\n"
-    "static int csga_which;\t\t// 1=CurWeapon 2=AmmoX 3=Battery 4=Money, 0=khong guong\n"
+    "static int csga_which;\t\t// 1=CurWeapon 2=AmmoX 3=Battery 4=Money 5=Health, 0=khong guong\n"
     "static int csga_pay_off;\t// vi tri byte dau payload trong sv.multicast\n"
     "static int csga_own_num;\t// so hieu ban tin CSGAOwn (0 = chua dang ky)\n"
     "\n"
@@ -133,6 +133,11 @@ patch(
     "\t\telse if( !Q_strcmp( svgame.msg_name, \"AmmoX\" )) csga_which = 2;\n"
     "\t\telse if( !Q_strcmp( svgame.msg_name, \"Battery\" )) csga_which = 3;\n"
     "\t\telse if( !Q_strcmp( svgame.msg_name, \"Money\" )) csga_which = 4;\n"
+    "\t\t// Health (w=5): banner spectator phai hien MAU CUA NGUOI DANG BAM.\n"
+    "\t\t// entity_state.health = 0 o MOI demo (do #13 va #16) nen khong the\n"
+    "\t\t// lay tu do; va TUYET DOI khong duoc de client ghi cl.local.health=0\n"
+    "\t\t// — engine an viewmodel+crosshair bang `cl.local.health <= 0`.\n"
+    "\t\telse if( !Q_strcmp( svgame.msg_name, \"Health\" )) csga_which = 5;\n"
     "\t}\n",
     "mirror-mark",
 )
