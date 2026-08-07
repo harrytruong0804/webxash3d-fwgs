@@ -225,4 +225,44 @@ patch(
     "own-dte-debug",
 )
 
+# --- 7. VIEWMODEL: sung cua nguoi dang bam, do ENGINE cap moi frame ---
+# User bat quy luat vang: /replay (engine cu, chua nuot untagged) doi cam KHONG
+# mat sung — vi luong CurWeapon untagged lam dll tuong MINH cam sung va tu ve.
+# Ta nuot luong do (dung, vi no la sung nguoi khac) thi phai CAP LAI chu dong:
+# map weaponmodel p_ -> v_ (nhu V_FindViewModelByWeaponModel cua cs16-client)
+# roi dat clientdata.viewmodel — cl_pmove copy vao cl.local.viewmodel, cl_view
+# ve moi frame => de len ca viec dll NULL gunModel. wm=0 (chet) -> 0 = an sung.
+patch(
+    "engine/client/cl_frame.c",
+    "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n",
+    "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n"
+    "\t\t\t\t\t{\n"
+    "\t\t\t\t\t\tstatic int vm_last_wm = -1, vm_last_idx;\n"
+    "\t\t\t\t\t\tif( wm != vm_last_wm )\n"
+    "\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\tmodel_t *pm2 = wm ? CL_ModelHandle( wm ) : NULL;\n"
+    "\t\t\t\t\t\t\tvm_last_idx = 0;\n"
+    "\t\t\t\t\t\t\tif( pm2 && pm2->name[0] )\n"
+    "\t\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\t\tconst char *sub2 = Q_strstr( pm2->name, \"/p_\" );\n"
+    "\t\t\t\t\t\t\t\tif( sub2 )\n"
+    "\t\t\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\t\t\tchar vname[64];\n"
+    "\t\t\t\t\t\t\t\t\tint vj;\n"
+    "\t\t\t\t\t\t\t\t\tQ_strncpy( vname, pm2->name, sizeof( vname ));\n"
+    "\t\t\t\t\t\t\t\t\tvname[sub2 - pm2->name + 1] = 'v';\n"
+    "\t\t\t\t\t\t\t\t\tfor( vj = 1; vj < MAX_MODELS; vj++ )\n"
+    "\t\t\t\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\t\t\t\tmodel_t *mv = CL_ModelHandle( vj );\n"
+    "\t\t\t\t\t\t\t\t\t\tif( mv && mv->name[0] && !Q_stricmp( mv->name, vname )) { vm_last_idx = vj; break; }\n"
+    "\t\t\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\t\tvm_last_wm = wm;\n"
+    "\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\tframe->clientdata.viewmodel = vm_last_idx;\n"
+    "\t\t\t\t\t}\n",
+    "own-viewmodel",
+)
+
 print("csga-own.py: tat ca patch da ap")
