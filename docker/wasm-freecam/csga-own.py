@@ -712,3 +712,39 @@ patch(
     "\t\t\t\t\t\t\t}",
     "own-cw-dbg-synth",
 )
+
+# --- 16. SUA GOC tam ngam nguoc: ep lai co SAU pmove, TRUOC khi dll doc ---
+# Chuoi nhan qua (do tan tay 8/8, [PRC] fg/tg):
+#   ta ghi FL_DUCKING+FL_ONGROUND vao clientdata (dung) → prediction mo phong
+#   chuyen dong bang THAN THE MAY GHI (spectator lo lung) → voi hull ngoi, trace
+#   cham dat hong → pmove XOA FL_ONGROUND khoi `to` → khung sau dll doc from=to
+#   cu → "tren khong" → ammo.cpp ×2 (khe 17.5) thay vi ×0.5 (khe 4).
+# Dung: 8×1.5=12→13px (nhanh toc-do, iWeaponSpeed=0 va 0>=0 luon dung — hanh vi
+# nay GIONG CS that, anh choi that cua user cung rong khi dung). Ngoi: 4 ✓.
+# Ep o day chu khong o cl_frame.c: day la DIEM CUOI truoc khi dll doc, moi thu
+# pmove pha o giua deu bi ghi de lai.
+patch(
+    "engine/client/cl_pmove.c",
+    "\tif( cls.demoplayback )\n"
+    "\t{\n"
+    "\t\tstatic double csga_dbg_t;",
+    "\t/* CSGA: ep lai co theo NGUOI DANG BAM — xem csga-own.py muc 16 */\n"
+    "\tif( cls.demoplayback )\n"
+    "\t{\n"
+    "\t\textern int democam_target;\n"
+    "\t\tif( democam_target > 0 )\n"
+    "\t\t{\n"
+    "\t\t\tcl_entity_t *dce = CL_GetEntityByIndex( democam_target );\n"
+    "\t\t\tif( dce && dce->model )\n"
+    "\t\t\t{\n"
+    "\t\t\t\tint dfl = FL_ONGROUND | (( dce->curstate.usehull == 1 ) ? FL_DUCKING : 0 );\n"
+    "\t\t\t\tfrom->client.flags = ( from->client.flags & ~FL_DUCKING ) | dfl;\n"
+    "\t\t\t\tto->client.flags   = ( to->client.flags   & ~FL_DUCKING ) | dfl;\n"
+    "\t\t\t}\n"
+    "\t\t}\n"
+    "\t}\n"
+    "\tif( cls.demoplayback )\n"
+    "\t{\n"
+    "\t\tstatic double csga_dbg_t;",
+    "own-flags-after-pmove",
+)
