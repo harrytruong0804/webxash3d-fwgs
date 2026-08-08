@@ -59,6 +59,8 @@ static csga_own_t csga_own[65];
 static int csga_own_view;
 static const char *csga_nm[] = { "", "CurWeapon", "AmmoX", "Battery", "Money", "Health" };
 
+int CSGA_OwnHealth( int ent );	/* dinh nghia ben duoi */
+
 void CSGA_OwnStore( const byte *b, int len )
 {
 \tint which = b[0], owner = b[1];
@@ -94,6 +96,23 @@ void CSGA_OwnStore( const byte *b, int len )
 \t/* dang xem dung nguoi nay -> phat ban tin goc ngay, HUD cap nhat tuc thi */
 \tif( owner == csga_own_view && cls.demoplayback )
 \t\tCL_DispatchUserMessage( csga_nm[which], len, (void *)p );
+
+\t/* Banner doc g_PlayerExtraInfo[g_iUser2].health — mot BANG, khong phai doc
+\t * lai moi khung nhu cum HUD goc trai. Neu chi bom luc doi cam thi banner
+\t * dong bang o gia tri CO LUC DO: keyframe rai theo con tro nen nguoi thu hai
+\t * toi SAU luc doi cam -> banner cua ho ket o 0 (do 8/8 tren demo #20).
+\t * Nen bom NGAY khi nhan duoc mau, cho dung nguoi do. */
+\tif( which == 5 && cls.demoplayback )
+\t{
+\t\tbyte sh2[2];
+\t\tint hp = CSGA_OwnHealth( owner );
+\t\tif( hp > 0 )
+\t\t{
+\t\t\tsh2[0] = (byte)hp;
+\t\t\tsh2[1] = (byte)owner;
+\t\t\tCL_DispatchUserMessage( "SpecHealth2", 2, (void *)sh2 );
+\t\t}
+\t}
 }
 
 int CSGA_OwnHealth( int ent );	/* dinh nghia ben duoi */
@@ -413,4 +432,19 @@ patch(
     "\t\t\t\t\t\t\tdte->curstate.health = csga_hp;\n"
     "\t\t\t\t\t}\n",
     "own-banner-health",
+)
+
+# --- 9. TRA pfnIsSpectateOnly() VE FALSE khi phat demo ---
+# csga-client.patch cho ham nay tra them `cls.demoplayback` de client dll chiu
+# xu ly doi nguoi bam CUC BO. Nhung cs16-client cl_dll/health.cpp:
+#     if( !(gHUD.m_iHideHUDDisplay & HIDEHUD_HEALTH) && !gEngfuncs.IsSpectateOnly() )
+# => co gia tri true la TAT HAN cum mau goc trai duoi. Mat 5 vong di sua du lieu
+# phia sau mot cai cong do CHINH MINH dong (8/8).
+# Da do: bo `cls.demoplayback` thi cum mau hien dung (icon + va so), va `democam`
+# VAN doi nguoi binh thuong — ban va do nay thua vi ta doi cam TRONG ENGINE.
+patch(
+    "engine/client/cl_game.c",
+    "\treturn (cls.spectator != 0) || cls.demoplayback;",
+    "\treturn (cls.spectator != 0);\t/* KHONG them demoplayback: xem csga-own.py muc 9 */",
+    "own-spectate-only",
 )
