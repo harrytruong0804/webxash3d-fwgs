@@ -781,7 +781,7 @@ patch(
     "\t\t\t\telse if( ce->curstate.usehull == 1 )\n"
     "\t\t\t\t\tneworg[2] += 12.0f;\t\t/* VEC_DUCK_VIEW */\n"
     "\t\t\t\telse\n"
-    "\t\t\t\t\tneworg[2] += 17.0f;\t\t/* VEC_VIEW cua CS (KHONG phai 28 cua HL) */\n"
+    "\t\t\t\t\tneworg[2] += 28.0f;\t\t/* DEFAULT_VIEWHEIGHT, giong dll */\n"
     "\t\t\t\tVectorSubtract( neworg, rp.vieworg, delta );\n"
     "\t\t\t\tVectorCopy( neworg, rp.vieworg );\n"
     "\t\t\t\tif( clgame.viewent.model )\n"
@@ -794,4 +794,35 @@ patch(
     "\t\t}\n"
     "\t\tCL_DemoCamApply( &rp );",
     "own-camera-authoritative",
+)
+
+
+# --- 18. SUA DUONG DAN: cong chieu cao mat vao diem xuat phat cua vien dan ---
+# LOI THAT CUA cs16-client (cl_dll/ev_common.cpp:104 EV_GetGunPosition):
+#     if( EV_IsLocal(idx) && !IS_FIRSTPERSON_SPEC ) <lay view height that: 17>
+#     else if( args->ducking == 1 )                 <lay VEC_DUCK_VIEW: 12>
+#     // DUNG ma khong phai minh -> KHONG NHANH NAO CHAY -> view_ofs = (0,0,0)
+#     pos = args->origin + view_ofs;
+# => xem nguoi khac DUNG thi dan xuat phat tu duoi CHAN, cam vao tuong THAP HON
+# tam ngam dung bang chieu cao mat.
+#
+# User chot bang phep so HAI MAN HINH SONG SONG (nguoi choi that vs inspector,
+# cung canh): TAM NGAM hai ben TRUNG nhau, chi VET DAN lech => camera von dung,
+# sai nam o duong dan. Nho vay loai duoc camera khoi dien nghi va tim ra day.
+# Cung giai thich: nguoi choi that khong dinh (nhanh dau chay), NGOI khong dinh
+# (co nhanh 12) — chi DUNG moi lech, khop y het quan sat.
+#
+# Vá o engine vi dll la wasm dong san: dll tinh pos = args->origin + view_ofs,
+# nen cong san chieu cao mat vao args->origin la du. CHI khi phat demo.
+patch(
+    "engine/client/cl_events.c",
+    "\t\t\t\t\tCL_CalcPlayerVelocity( state->number, args.velocity );\n"
+    "\t\t\t\t\targs.ducking = ( state->usehull == 1 );\n",
+    "\t\t\t\t\tCL_CalcPlayerVelocity( state->number, args.velocity );\n"
+    "\t\t\t\t\targs.ducking = ( state->usehull == 1 );\n"
+    "\n"
+    "\t\t\t\t\t/* xem csga-own.py muc 18 */\n"
+    "\t\t\t\t\tif( cls.demoplayback && !args.ducking )\n"
+    "\t\t\t\t\t\targs.origin[2] += 17.0f;\t/* VEC_VIEW cua CS */\n",
+    "own-bullet-origin",
 )
