@@ -494,6 +494,12 @@ patch(
 #     Camera cao hon mat that 11 don vi => ngam NGANG ma dan cam THAP HON tam.
 #     Ngoi thi dll dung 12 = dung VEC_DUCK_VIEW nen khong loi — khop viec chi
 #     thay lech luc DUNG.
+# (b2) DUNG dung 17 (VEC_VIEW cua CS), KHONG dung 28.
+#     28 la DEFAULT_VIEWHEIGHT cua Half-Life goc; cs16-client bê nguyên sang CS
+#     (cl_dll/view.cpp:1459 V_GetInEyePos) nen dll sai san. Chep theo dll thi
+#     CAMERA o 28 trong khi VIEN DAN roi khoi 17 (muc 18) -> dung thi vet dan
+#     thap hon tam DUNG 11 don vi, ngoi thi trung khit vi ca hai deu dung 12.
+#     Do la trieu chung user bao: "ngoi thi chinh xac, dung thi bi lech".
 # (c) TAY SUNG phai dich cung mot luong: dll dat viewmodel theo vieworg CU cua
 #     no; khong dich theo thi "mat tay, chi con dau nong tho ra".
 patch(
@@ -513,7 +519,7 @@ patch(
     "\t\t\t\telse if( ce->curstate.usehull == 1 )\n"
     "\t\t\t\t\tneworg[2] += 12.0f;\t\t/* VEC_DUCK_VIEW */\n"
     "\t\t\t\telse\n"
-    "\t\t\t\t\tneworg[2] += 28.0f;\t\t/* DEFAULT_VIEWHEIGHT, giong dll */\n"
+    "\t\t\t\t\tneworg[2] += 17.0f;\t\t/* VEC_VIEW cua CS */\n"
     "\t\t\t\tVectorSubtract( neworg, rp.vieworg, delta );\n"
     "\t\t\t\tVectorCopy( neworg, rp.vieworg );\n"
     "\t\t\t\tif( clgame.viewent.model )\n"
@@ -558,3 +564,38 @@ patch(
     "\t\t\t\t\t\targs.origin[2] += 17.0f;\t/* VEC_VIEW cua CS */\n",
     "own-bullet-origin",
 )
+
+# --- GHI CHU: KHONG bat pfnPostRunCmd khi phat demo ---
+# Da thu HAI LAN va ca hai lan deu SAI:
+#   `if( cls.state != ca_active || ( cls.spectator && !cls.demoplayback )) return;`
+# Ly do them: pfnPostRunCmd -> HUD_WeaponsPostThink la noi gan g_iPlayerFlags,
+# tuong rang thieu no thi co FL_DUCKING (muc 16) khong ai doc.
+# THUC TE DO DUOC (user kiem tay 2026-08-08): bat len thi NGOI lai GIAN RA,
+# tat di thi ngoi thu nho / dung gian ra — DUNG.
+# => dll con mot duong KHAC de biet tu the nguoi dang bam ma tao chua tim ra;
+# ep thu cong qua clientdata lam nhieu duong do. Truoc khi dong vao day lan
+# nua, PHAI tim duoc duong that su nuoi crosshair (dat diem dung trong
+# cs16-client GetCrosshairGap/DrawCrosshair roi lan nguoc), dung suy tu
+# "noi duy nhat gan g_iPlayerFlags" — suy luan do da sai hai lan.
+
+# --- 20. Cho code vu khi chay khi phat demo (CAN, dung go nua) ---
+# `cs16-client` gan g_iPlayerFlags / g_flPlayerSpeed o DUNG MOT cho:
+# cl_dll/cs_wpn/cs_weapons.cpp:1232, ben trong HUD_WeaponsPostThink, ma no chi
+# toi duoc qua HUD_PostRunCmd (dong 1472). Tat pfnPostRunCmd khi phat demo =>
+# hai bien vinh vien 0 => GetCrosshairGap luon roi vao nhanh dau
+# (`!(0 & FL_ONGROUND) && ACCURACY_AIR` -> minGap *= 2) => TAM NGAM DUNG HINH.
+# Da do 2026-08-08: 12 khung cach nhau 3s tren demo ngoi/dung moi 6s cho tam
+# ngam Y HET NHAU. "Khong doi" rat de bi doc nham thanh "dung".
+# `cls.spectator` bi dat lai true o cl_parse.c:2060 (HLTV_ACTIVE) sau khi
+# cl_demo.c:731 da dat false, nen phai loai tru bang cls.demoplayback.
+patch(
+    "engine/client/cl_pmove.c",
+    "\tif( cls.state != ca_active || cls.spectator )\n\t\treturn;",
+    "\tif( cls.state != ca_active || ( cls.spectator && !cls.demoplayback ))\n\t\treturn;",
+    "own-postruncmd",
+)
+
+# Ghi chu do luong 2026-08-08 (bang chung, dung do lai tu dau):
+#   demo #25 (ngoi/dung luan phien 6s), do khe tam ngam theo tung khung kem
+#   `usehull` doc cung khung:  DUNG = 10px,  NGOI = 4-5px  -> ty le 0.5 dung
+#   bang `minGap *= 0.5f` trong cs16-client GetCrosshairGap. Tam ngam DUNG.
