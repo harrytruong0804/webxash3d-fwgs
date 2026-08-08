@@ -119,12 +119,27 @@ void CSGA_OwnReplay( int ent )
 \t\tif( o->len[w] )
 \t\t\tCL_DispatchUserMessage( csga_nm[w], o->len[w], (void *)o->raw[w] );
 
-\t/* Banner spectator. ReGameDLL gui SpecHealth = 1 byte mau; dung lai gia tri
-\t * trong bang Health cua chinh nguoi dang bam. */
+\t/* Banner "<ten> (<mau>)" doc g_PlayerExtraInfo[i].health (cs16-client
+\t * hud/spectator_gui.cpp). Co HAI ban tin ghi vao mang do:
+\t *   SpecHealth  = [mau]            -> g_PlayerExtraInfo[g_iUser2].health
+\t *   SpecHealth2 = [mau][chi so]    -> g_PlayerExtraInfo[client].health
+\t * PHAI dung SpecHealth2: luc phat demo, g_iUser2 la nguoi MAY GHI bam luc
+\t * quay, khac nguoi democam dang bam — gui SpecHealth la ghi dung gia tri
+\t * vao SAI O (do 8/8: banner van "(0)"). SpecHealth2 chi dinh duoc o.
+\t * Gui cho MOI nguoi co du lieu, khong chi nguoi dang bam, de doi cam sang
+\t * ai cung dung ngay. */
 \t{
-\t\tbyte sh = (byte)CSGA_OwnHealth( ent );
-\t\tif( sh )
-\t\t\tCL_DispatchUserMessage( "SpecHealth", 1, (void *)&sh );
+\t\tint pi;
+\t\tfor( pi = 1; pi <= 64; pi++ )
+\t\t{
+\t\t\tbyte sh2[2];
+\t\t\tint hp = CSGA_OwnHealth( pi );
+\t\t\tif( hp <= 0 )
+\t\t\t\tcontinue;
+\t\t\tsh2[0] = (byte)hp;
+\t\t\tsh2[1] = (byte)pi;
+\t\t\tCL_DispatchUserMessage( "SpecHealth2", 2, (void *)sh2 );
+\t\t}
 \t}
 }
 
@@ -185,7 +200,8 @@ patch(
     # phai Health, cung khong phai entity_state.health (do 8/8: da ep
     # curstate.health = 100 ma banner van "(0)"). Ban ghi lai mang mau cua nguoi
     # MAY GHI bam luc quay, khac nguoi luc replay bam, nen phai nuot.
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "SpecHealth" )))\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "SpecHealth" )\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "SpecHealth2" )))\n'
     '\t/* KHONG nuot HideWeapon: no la CONG TAC bat/tat HUD chu khong phai du lieu\n'
     '\t * per-player. Nuot ca goi = nuot luon lenh BO AN -> sung an vinh vien\n'
     '\t * (do 8/8: nuot xong la mat tay sung ngay khi doi cam). */\n'
