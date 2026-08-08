@@ -96,6 +96,8 @@ void CSGA_OwnStore( const byte *b, int len )
 \t\tCL_DispatchUserMessage( csga_nm[which], len, (void *)p );
 }
 
+int CSGA_OwnHealth( int ent );	/* dinh nghia ben duoi */
+
 void CSGA_OwnReplay( int ent )
 {
 \tcsga_own_t *o;
@@ -116,6 +118,14 @@ void CSGA_OwnReplay( int ent )
 \tfor( w = 3; w <= 5; w++ )
 \t\tif( o->len[w] )
 \t\t\tCL_DispatchUserMessage( csga_nm[w], o->len[w], (void *)o->raw[w] );
+
+\t/* Banner spectator. ReGameDLL gui SpecHealth = 1 byte mau; dung lai gia tri
+\t * trong bang Health cua chinh nguoi dang bam. */
+\t{
+\t\tbyte sh = (byte)CSGA_OwnHealth( ent );
+\t\tif( sh )
+\t\t\tCL_DispatchUserMessage( "SpecHealth", 1, (void *)&sh );
+\t}
 }
 
 /* Mau da giai ma — CHI de vá banner spectator (xem patch own-banner-health).
@@ -170,7 +180,12 @@ patch(
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Health" )))\n'
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Health" )\n'
+    # SpecHealth: BANNER spectator "<ten> (<mau>)" doc RIENG ban tin nay — khong
+    # phai Health, cung khong phai entity_state.health (do 8/8: da ep
+    # curstate.health = 100 ma banner van "(0)"). Ban ghi lai mang mau cua nguoi
+    # MAY GHI bam luc quay, khac nguoi luc replay bam, nen phai nuot.
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "SpecHealth" )))\n'
     '\t/* KHONG nuot HideWeapon: no la CONG TAC bat/tat HUD chu khong phai du lieu\n'
     '\t * per-player. Nuot ca goi = nuot luon lenh BO AN -> sung an vinh vien\n'
     '\t * (do 8/8: nuot xong la mat tay sung ngay khi doi cam). */\n'
