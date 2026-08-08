@@ -369,6 +369,13 @@ patch(
     "\t\t\t\t\t\t\t\t * Cung khuon mau da sua duoc loi ngoi/dung: ghi vao\n"
     "\t\t\t\t\t\t\t\t * playerstate[cl.playernum] chu khong vao entity dang bam. */\n"
     "\t\t\t\t\t\t\t\tframe->playerstate[cl.playernum].health = hp2;\n"
+    "\t\t\t\t\t\t\t\t/* SO MAU canh giap bi chan boi BIT SUIT, khong phai boi gia\n"
+    "\t\t\t\t\t\t\t\t * tri mau — cs16-client cl_dll/health.cpp:\n"
+    "\t\t\t\t\t\t\t\t *   if( gHUD.m_iWeaponBits & (1<<WEAPON_SUIT) ) <ve so>\n"
+    "\t\t\t\t\t\t\t\t * m_iWeaponBits lay tu client_data_t.iWeaponBits, ma\n"
+    "\t\t\t\t\t\t\t\t * spectator co weapons = 0 -> cong dong, du m_iHealth dung.\n"
+    "\t\t\t\t\t\t\t\t * WEAPON_SUIT = 31 trong SDK. */\n"
+    "\t\t\t\t\t\t\t\tframe->clientdata.weapons |= ( 1U << 31 );\n"
     "\t\t\t\t\t\t\t}\n"
     "\t\t\t\t\t\t}\n",
     "own-duck",
