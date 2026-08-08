@@ -599,3 +599,21 @@ patch(
 #   demo #25 (ngoi/dung luan phien 6s), do khe tam ngam theo tung khung kem
 #   `usehull` doc cung khung:  DUNG = 10px,  NGOI = 4-5px  -> ty le 0.5 dung
 #   bang `minGap *= 0.5f` trong cs16-client GetCrosshairGap. Tam ngam DUNG.
+
+# Kiem CUC cua usehull (do 2026-08-08, dung origin[2] lam chi so DOC LAP):
+#   hull=0 -> z=36   |   hull=1 -> z=18   (thap hon dung 18 don vi, khop PM_Duck)
+# => usehull==1 THAT SU la ngoi. Ca ba ban va (camera muc 17, duong dan muc 18,
+#    co tu the muc 16) doc dung cuc, khong can dao.
+#
+# BAY VE PHUONG PHAP: "vet dan trung tam" KHONG kiem duoc cuc nay. Camera va
+# nong sung deu doc usehull, nen sai cuc thi ca hai lech CUNG CHIEU va tren man
+# hinh van trung khit. Muon kiem mot gia tri thi phai doi chieu voi thu MINH
+# KHONG SINH RA.
+#
+# Do tam ngam sau khi sua (demo #25, cua so 1500px, doc hull cung khung):
+#   DUNG khe 23px / canh 9px      NGOI khe 8px / canh 5px
+# Canh chuyen dung->ngoi di qua mot khung 22/14: `m_flCrosshairDistance` bi kep
+# `max(dist, iDistance)` nen len TUC THI, con xuong thi phai co dan
+# (`-= dist*0.013 + 0.1` moi khung), trong luc do `iLength` phinh ra. Do la
+# hanh vi goc cua CS, khong phai loi — nhung truoc khi sua thi tam ngam DUNG
+# HINH, nen cu no nay la thu moi xuat hien.
