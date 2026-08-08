@@ -33,8 +33,18 @@ ARG XASH_REPO=https://github.com/harrytruong0804/xash3d-fwgs
 ARG XASH_COMMIT=f85aa0c8f7d4
 
 WORKDIR /xash3d-fwgs
-RUN git clone "$XASH_REPO" . && git checkout "$XASH_COMMIT" \
-    && git submodule update --init --recursive
+# ⚠️ THU TU QUAN TRONG: clone DUNG NHANH `merged` roi moi checkout commit, roi
+# MOI dung submodule (kem --force).
+# Ban dau viet `git clone <repo>` tran -> clone ra nhanh MAC DINH cua fork la
+# `master`, trong khi commit da nghiem thu nam o nhanh `merged`. `git checkout`
+# KHONG tu cap nhat submodule, nen cay con co the con o trang thai cua master.
+# Ma cs16-client / ref renderer deu la submodule => ENGINE KHAC THAT, du cung
+# commit cha. Do la ly do hai ban build "cung ma nguon" lai chay khac nhau
+# (user phat hien 2026-08-08: trang highlight va /replay/id dao nguoc hanh vi
+# ngoi/dung). Dung do cho emscripten "khong tat dinh" nhu tao ket luan voi vang.
+RUN git clone --branch merged --single-branch "$XASH_REPO" . \
+    && git checkout "$XASH_COMMIT" \
+    && git submodule update --init --recursive --force
 
 # TOAN BO ban va client gop trong MOT file patch (xuat tu git diff cay build
 # da nghiem thu 2026-08-07). Truoc day la chuoi sed + democam.py — cang nhieu

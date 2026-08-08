@@ -17,8 +17,18 @@ WORKDIR /xash
 # nhau; muon nang nen thi doi COMMIT o day mot cach co y thuc.
 ARG XASH_REPO=https://github.com/harrytruong0804/xash3d-fwgs
 ARG XASH_COMMIT=f85aa0c8f7d4
-RUN git clone "$XASH_REPO" . && git checkout "$XASH_COMMIT" \
-    && git submodule update --init --recursive
+# ⚠️ THU TU QUAN TRONG: clone DUNG NHANH `merged` roi moi checkout commit, roi
+# MOI dung submodule (kem --force).
+# Ban dau viet `git clone <repo>` tran -> clone ra nhanh MAC DINH cua fork la
+# `master`, trong khi commit da nghiem thu nam o nhanh `merged`. `git checkout`
+# KHONG tu cap nhat submodule, nen cay con co the con o trang thai cua master.
+# Ma cs16-client / ref renderer deu la submodule => ENGINE KHAC THAT, du cung
+# commit cha. Do la ly do hai ban build "cung ma nguon" lai chay khac nhau
+# (user phat hien 2026-08-08: trang highlight va /replay/id dao nguoc hanh vi
+# ngoi/dung). Dung do cho emscripten "khong tat dinh" nhu tao ket luan voi vang.
+RUN git clone --branch merged --single-branch "$XASH_REPO" . \
+    && git checkout "$XASH_COMMIT" \
+    && git submodule update --init --recursive --force
 
 # Them lenh server `stuffto` — bao mot client chay mot lenh (svc_stufftext).
 # Can de bao may ghi (client) doi muc tieu `follow` giua tran; xem stuffto.py.
