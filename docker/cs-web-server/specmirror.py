@@ -131,10 +131,12 @@ static void CSGA_SnapStore( int owner, int which, const byte *pay, int paylen )
 \t\treturn;
 \tif( which == 2 )\t// AmmoX = [chi so dan][so vien]
 \t{
+\t\t// BO loai dan dang bang 0: bang mac dinh phia client von la 0, ma game
+\t\t// gui ca ~30 loai moi nguoi -> anh chup phinh gap muoi lan vo ich.
 \t\tif( paylen >= 2 && pay[0] < 32 )
 \t\t{
 \t\t\tcsga_ammo[owner][pay[0]] = pay[1];
-\t\t\tcsga_ammoseen[owner][pay[0]] = 1;
+\t\t\tcsga_ammoseen[owner][pay[0]] = pay[1] ? 1 : 0;
 \t\t}
 \t\treturn;
 \t}
@@ -253,11 +255,16 @@ void CSGA_KeyframeTick( void )
 \t\t\tcontinue;
 \t\t}
 
-\t\tif( due || !csga_seen_cl[i] )
+\t\t// Client vua vao: phat ngay. Con dinh ky thi CHI bat dau khi luot truoc
+\t\t// da chay het (-1) — server dong nguoi thi mot luot dai hon 5 giay, dat
+\t\t// lai vo dieu kien se lam nhung nguoi cuoi danh sach KHONG BAO GIO duoc gui.
+\t\tif( !csga_seen_cl[i] )
 \t\t{
 \t\t\tcsga_seen_cl[i] = 1;
 \t\t\tcsga_cursor[i] = CSGA_PER_PL;\t// bo qua nguoi 0 (world)
 \t\t}
+\t\telse if( due && csga_cursor[i] < 0 )
+\t\t\tcsga_cursor[i] = CSGA_PER_PL;
 \t\tif( csga_cursor[i] < 0 )
 \t\t\tcontinue;
 
