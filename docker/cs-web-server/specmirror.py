@@ -226,6 +226,22 @@ static void CSGA_MirrorToWatchers( void )
 void CSGA_KeyframeTick( void );	// khai bao truoc: tranh -Wmissing-prototypes
 void CSGA_KeyframeTick( void )
 {
+	/* CONG TAC THU NGHIEM (user yeu cau 8/8): CSGA_NO_KEYFRAME=1 trong env cua
+	 * container -> TAT HAN moi dot chen keyframe (ke ca anh chup luc vao). De
+	 * phan xu vu "nhay hinh": demo quay khi TAT ma van nhay => keyframe vo can.
+	 * HUD cua nguoi vao truoc may ghi se RONG khi bat cong tac — chap nhan duoc
+	 * cho thi nghiem, KHONG de bat tren prod lau dai. */
+	{
+		static int csga_kf_off = -1;
+		if( csga_kf_off < 0 )
+		{
+			const char *e = getenv( "CSGA_NO_KEYFRAME" );
+			csga_kf_off = ( e && e[0] == '1' ) ? 1 : 0;
+		}
+		if( csga_kf_off )
+			return;
+	}
+
 \tsv_client_t\t*cl;
 \tint\t\ti, sent;
 \tqboolean\tdue;
