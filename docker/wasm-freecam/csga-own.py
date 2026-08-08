@@ -617,3 +617,70 @@ patch(
 # (`-= dist*0.013 + 0.1` moi khung), trong luc do `iLength` phinh ra. Do la
 # hanh vi goc cua CS, khong phai loi — nhung truoc khi sua thi tam ngam DUNG
 # HINH, nen cu no nay la thu moi xuat hien.
+
+# --- 21. TU CHON NGUOI BAM ngay khi mo demo ---
+#
+# VAN DE (user phat hien 2026-08-09): mo trang xem lai ma CHUA click vao khung
+# hinh thi `democam_target` van la 0 (cl_view.c:371 khoi tao 0 = tat), nen KHONG
+# MOT ban va nao cua CSGA chay — dang xem goc nhin tho cua may ghi, la mot
+# spectator dang BAY. Spectator bay thi `from->client.flags` khong co
+# FL_ONGROUND, nen GetCrosshairGap cua cs16-client roi vao nhanh ACCURACY_AIR
+# (`minGap *= 2`) co dinh: tam ngam to va khong phan ung ngoi/dung.
+# Click chuot trai goi `democam_next` -> target > 0 -> moi thu dung tro lai.
+#
+# Moi phep do truoc day deu "dung" vi script tu dong luon go `democam 1` ngay
+# sau khi phat — vo tinh bat che do cua minh, trong khi nguoi dung thi khong.
+#
+# Sua: dang phat demo ma target con 0 thi tu tim nguoi dau tien hop le.
+# - Chi tu chon MOT LAN moi demo (`democam_auto`), de nguoi xem van bam duoc
+#   "cam goc" (`democam 0`) quay ve goc nhin may ghi ma khong bi keo lai.
+# - Phai kiem lai ket qua: CL_DemoCamStep KHONG tra ve 0 khi that bai — no
+#   tang dan roi thoat vong lap voi target = maxclients. Luc dau tran thuc the
+#   chua co model, nen khong kiem thi se bam vao mot chi so rong.
+patch(
+    "engine/client/cl_view.c",
+    "void CL_DemoCamNext_f( void ) { CL_DemoCamStep( +1 ); }",
+    "int democam_auto = 0;\t/* da tu chon nguoi bam cho demo nay chua */\n"
+    "void CSGA_DemoCamAutoPick( void )\n"
+    "{\n"
+    "\tcl_entity_t *e;\n"
+    "\tif( !cls.demoplayback || democam_auto || democam_target != 0 )\n"
+    "\t\treturn;\n"
+    "\tCL_DemoCamStep( +1 );\n"
+    "\te = CL_GetEntityByIndex( democam_target );\n"
+    "\tif( democam_target > 0 && e && e->model && democam_target != cl.playernum + 1 )\n"
+    "\t\tdemocam_auto = 1;\n"
+    "\telse\n"
+    "\t\tdemocam_target = 0;\t/* chua san sang — thu lai khung sau */\n"
+    "}\n"
+    "void CL_DemoCamNext_f( void ) { CL_DemoCamStep( +1 ); }",
+    "own-autopick",
+)
+
+# Goi moi khung, ngay TRUOC khoi camera (muc 17) de khung dau tien da co nguoi bam.
+patch(
+    "engine/client/cl_view.c",
+    "\t\tclgame.dllFuncs.pfnCalcRefdef( &rp );\n"
+    "\t\tif( cls.demoplayback && !democam_chase && democam_target > 0 )",
+    "\t\tCSGA_DemoCamAutoPick();\n"
+    "\t\tclgame.dllFuncs.pfnCalcRefdef( &rp );\n"
+    "\t\tif( cls.demoplayback && !democam_chase && democam_target > 0 )",
+    "own-autopick-call",
+)
+
+# Mo demo moi thi quen lua chon cu — khong thi demo thu hai trong cung mot tab
+# se giu nguyen chi so cua demo truoc (khac tran, khac nguoi).
+patch(
+    "engine/client/cl_demo.c",
+    "\tcls.demoplayback = mode;\n"
+    "\tcls.state = ca_connected;",
+    "\tcls.demoplayback = mode;\n"
+    "\t{\n"
+    "\t\textern int democam_target, democam_auto;\n"
+    "\t\tdemocam_target = 0;\n"
+    "\t\tdemocam_auto = 0;\n"
+    "\t}\n"
+    "\tcls.state = ca_connected;",
+    "own-autopick-reset",
+)
+
