@@ -748,3 +748,50 @@ patch(
     "\t\tstatic double csga_dbg_t;",
     "own-flags-after-pmove",
 )
+
+# --- 17. CAMERA REPLAY: tu quyet dinh vi tri, dung chieu cao mat CUA CS ---
+# (a) VI TRI: da chung minh co khung dll re sang nhanh nguoi-choi-thuong va tra
+#     ve vi tri THAN THE MAY GHI — do trung khit: cam nhay ve (416 2080 35),
+#     may ghi o (416 2080 36), nguoi dang bam o (-608 -1920 -204). Va iuser o
+#     ca 3 tang (clientdata / curstate / `src` cua HUD_ProcessPlayerState) deu
+#     KHONG chan het duoc (van 50 cu nhay/100s) => thoi thuyet phuc dll, TU DAT.
+#     Sau va: 50 -> 2 cu, ca 2 deu hop le (luc chua bam + luc doi nguoi).
+# (b) CHIEU CAO MAT 17, khong phai 28: dll dung 28 = DEFAULT_VIEWHEIGHT cua
+#     HALF-LIFE (cl_dll/view.cpp:1490), con CS 1.6 dat mat o 17
+#     (dlls/util.h VEC_VIEW = (0,0,17); pm_shared.h PM_VEC_VIEW 17).
+#     Camera cao hon mat that 11 don vi => ngam NGANG ma dan cam THAP HON tam.
+#     Ngoi thi dll dung 12 = dung VEC_DUCK_VIEW nen khong loi — khop viec chi
+#     thay lech luc DUNG.
+# (c) TAY SUNG phai dich cung mot luong: dll dat viewmodel theo vieworg CU cua
+#     no; khong dich theo thi "mat tay, chi con dau nong tho ra".
+patch(
+    "engine/client/cl_view.c",
+    "\t\tclgame.dllFuncs.pfnCalcRefdef( &rp );\n"
+    "\t\tCL_DemoCamApply( &rp );",
+    "\t\tclgame.dllFuncs.pfnCalcRefdef( &rp );\n"
+    "\t\tif( cls.demoplayback && !democam_chase && democam_target > 0 )\n"
+    "\t\t{\n"
+    "\t\t\tcl_entity_t *ce = CL_GetEntityByIndex( democam_target );\n"
+    "\t\t\tif( ce && ce->model )\n"
+    "\t\t\t{\n"
+    "\t\t\t\tvec3_t neworg, delta;\n"
+    "\t\t\t\tVectorCopy( ce->origin, neworg );\n"
+    "\t\t\t\tif( ce->curstate.solid == SOLID_NOT )\n"
+    "\t\t\t\t\tneworg[2] += -8.0f;\t\t/* PM_DEAD_VIEWHEIGHT */\n"
+    "\t\t\t\telse if( ce->curstate.usehull == 1 )\n"
+    "\t\t\t\t\tneworg[2] += 12.0f;\t\t/* VEC_DUCK_VIEW */\n"
+    "\t\t\t\telse\n"
+    "\t\t\t\t\tneworg[2] += 17.0f;\t\t/* VEC_VIEW cua CS (KHONG phai 28 cua HL) */\n"
+    "\t\t\t\tVectorSubtract( neworg, rp.vieworg, delta );\n"
+    "\t\t\t\tVectorCopy( neworg, rp.vieworg );\n"
+    "\t\t\t\tif( clgame.viewent.model )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tVectorAdd( clgame.viewent.origin, delta, clgame.viewent.origin );\n"
+    "\t\t\t\t\tVectorAdd( clgame.viewent.curstate.origin, delta, clgame.viewent.curstate.origin );\n"
+    "\t\t\t\t\tVectorAdd( clgame.viewent.latched.prevorigin, delta, clgame.viewent.latched.prevorigin );\n"
+    "\t\t\t\t}\n"
+    "\t\t\t}\n"
+    "\t\t}\n"
+    "\t\tCL_DemoCamApply( &rp );",
+    "own-camera-authoritative",
+)
