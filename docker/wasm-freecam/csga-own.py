@@ -346,7 +346,14 @@ patch(
     "\t\t\t\t\t\t\textern int CSGA_OwnHealth( int ent );\n"
     "\t\t\t\t\t\t\tint hp2 = CSGA_OwnHealth( dc_view );\n"
     "\t\t\t\t\t\t\tif( hp2 > 0 )\n"
+    "\t\t\t\t\t\t\t{\n"
     "\t\t\t\t\t\t\t\tframe->clientdata.health = hp2;\n"
+    "\t\t\t\t\t\t\t\t/* client_data_t KHONG co truong mau (engine/cdll_int.h) nen\n"
+    "\t\t\t\t\t\t\t\t * dll khong lay mau tu do. No doc entity cua CHINH MINH.\n"
+    "\t\t\t\t\t\t\t\t * Cung khuon mau da sua duoc loi ngoi/dung: ghi vao\n"
+    "\t\t\t\t\t\t\t\t * playerstate[cl.playernum] chu khong vao entity dang bam. */\n"
+    "\t\t\t\t\t\t\t\tframe->playerstate[cl.playernum].health = hp2;\n"
+    "\t\t\t\t\t\t\t}\n"
     "\t\t\t\t\t\t}\n",
     "own-duck",
 )
