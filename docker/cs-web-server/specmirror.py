@@ -222,7 +222,9 @@ void CSGA_KeyframeTick( void )
 \tint\t\ti, sent;
 \tqboolean\tdue;
 
-\tif( !csga_own_num || csga_own_num == svc_bad )
+\t// svc_bad BANG 0, nen \"chua dang ky\" va \"dang ky hong\" la CUNG mot dieu kien
+\t// — viet tach hai ve thi -Werror=logical-op chan build (do 2026-08-08).
+\tif( csga_own_num <= 0 )
 \t\treturn;
 
 \tdue = ( host.realtime >= csga_next_key );
