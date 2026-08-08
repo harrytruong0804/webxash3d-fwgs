@@ -22,11 +22,18 @@
 
 FROM emscripten/emsdk:4.0.23 AS build
 
-ARG XASH_REPO=https://github.com/yohimik/xash3d-fwgs
-ARG XASH_BRANCH=merged
+# ⚠️ NEN ENGINE: fork CUA MINH + GHIM COMMIT.
+# Truoc day clone thang `yohimik/xash3d-fwgs` nhanh `merged` — KHONG ghim, KHONG
+# phai repo cua minh. Upstream doi mot dong la MOI MO NEO va cua csga-own.py /
+# csga-client.patch VO, ma minh khong kiem soat duoc luc nao no doi.
+# Toan bo ban va cua CSGA la anchor-replace tren ma nguon nay nen day la rui ro
+# that, khong phai gia dinh. Fork + ghim => build hom nay va build sau nay giong
+# nhau; muon nang nen thi doi COMMIT o day mot cach co y thuc.
+ARG XASH_REPO=https://github.com/harrytruong0804/xash3d-fwgs
+ARG XASH_COMMIT=f85aa0c8f7d4
 
 WORKDIR /xash3d-fwgs
-RUN git clone --branch "$XASH_BRANCH" --single-branch "$XASH_REPO" . \
+RUN git clone "$XASH_REPO" . && git checkout "$XASH_COMMIT" \
     && git submodule update --init --recursive
 
 # TOAN BO ban va client gop trong MOT file patch (xuat tu git diff cay build

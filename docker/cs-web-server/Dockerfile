@@ -8,7 +8,16 @@ ENV PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
 
 WORKDIR /xash
 
-RUN git clone --branch merged --single-branch https://github.com/yohimik/xash3d-fwgs . \
+# ⚠️ NEN ENGINE: fork CUA MINH + GHIM COMMIT.
+# Truoc day clone thang `yohimik/xash3d-fwgs` nhanh `merged` — KHONG ghim, KHONG
+# phai repo cua minh. Upstream doi mot dong la MOI MO NEO va cua csga-own.py /
+# csga-client.patch VO, ma minh khong kiem soat duoc luc nao no doi.
+# Toan bo ban va cua CSGA la anchor-replace tren ma nguon nay nen day la rui ro
+# that, khong phai gia dinh. Fork + ghim => build hom nay va build sau nay giong
+# nhau; muon nang nen thi doi COMMIT o day mot cach co y thuc.
+ARG XASH_REPO=https://github.com/harrytruong0804/xash3d-fwgs
+ARG XASH_COMMIT=f85aa0c8f7d4
+RUN git clone "$XASH_REPO" . && git checkout "$XASH_COMMIT" \
     && git submodule update --init --recursive
 
 # Them lenh server `stuffto` — bao mot client chay mot lenh (svc_stufftext).
