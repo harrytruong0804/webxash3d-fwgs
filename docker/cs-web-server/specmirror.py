@@ -31,6 +31,14 @@ FCL_FULLVIS san co.
 
 Demo ghi goi THO nen ca bang du lieu nay nam trong .dem; phia client (patch
 wasm-freecam) giu bang theo tung entity va phat lai khi democam doi nguoi.
+
+LO HONG THU HAI — "anh chup ban dau" (do tren demo #18, 2026-08-08):
+gamedll chi gui Health/Money/AmmoX KHI GIA TRI DOI. Nguoi choi vao truoc may
+ghi ~17 giay nen ban tin mau=100 luc spawn da bay qua truoc khi may ghi noi
+vao; ai khong dinh dan thi bang du lieu RONG suot tran. Demo #18 chi co DUNG
+MOT ban tin w=5 va la cua chinh may ghi. Chua bang cach cho engine CACHE ban
+tin cuoi cua tung nguoi roi phat lai (keyframe) cho client fullvis luc vao va
+moi 5 giay sau do. Chi tiet o khoi 1 va 6.
 """
 import os
 import sys
@@ -52,71 +60,230 @@ def patch(path, find, replace, label):
 
 
 # --- 1. Bien trang thai + ham guong, dat ngay truoc pfnMessageBegin ---
+#
+# LO HONG "ANH CHUP BAN DAU" (do tren demo #18, 2026-08-08): Health/Money/AmmoX
+# chi duoc gamedll gui KHI GIA TRI DOI. Nguoi choi vao truoc may ghi ~17 giay,
+# nen ban tin mau=100 luc spawn da bay qua TRUOC khi may ghi noi vao -> bang du
+# lieu cua nguoi do RONG suot ca tran neu ho khong dinh dan. Demo #18 chi co
+# DUNG MOT ban tin w=5, va la cua chinh may ghi.
+#
+# Chua bang KEYFRAME: engine tu CACHE ban tin cuoi cua tung nguoi (khoa = chi so
+# nguoi + loai; rieng AmmoX khoa them theo chi so dan vi moi loai dan mot ban
+# tin), roi phat lai TOAN BO cho client fullvis luc no vao va dinh ky sau do.
+# Nho vay may ghi vao luc nao cung dung duoc, va demo tu lanh o moi diem.
+#
+# VI SAO PHAI RAI RA NHIEU KHUNG: mot anh chup day du la ~130 ban tin (16 nguoi
+# x [4 loai + vai loai dan]) ~ 2.3KB. Nhoi het vao `cl->netchan.message` trong
+# mot khung la TRAN — va SV_SendClientMessages xu ly tran bang SV_DropClient,
+# tuc tu tay da may ghi ra. Nen dung con tro chay, moi khung vai ban tin.
+MIRROR_C = """/* ==== CSGA: guong dan/giap/tien sang may ghi, co gan nhan chu so huu ==== */
+#define CSGA_OWN_SIZE\t16\t// [which][chi so nguoi][payload...] — CO DINH
+#define CSGA_MAXPL\t33\t// chi so edict cua nguoi choi: 1..32
+#define CSGA_NWHICH\t6\t// which chay 1..5
+#define CSGA_PER_PL\t36\t// 4 o thuong + 32 o dan, cho mot nguoi
+#define CSGA_SPACE\t( CSGA_MAXPL * CSGA_PER_PL )
+#define CSGA_KEY_SEC\t5.0\t// bao lau phat lai anh chup mot lan
+#define CSGA_PER_TICK\t4\t// so ban tin toi da nhoi trong mot khung
+
+static int csga_which;\t\t// 1=CurWeapon 2=AmmoX 3=Battery 4=Money 5=Health, 0=khong guong
+static int csga_pay_off;\t// vi tri byte dau payload trong sv.multicast
+static int csga_own_num;\t// so hieu ban tin CSGAOwn (0 = chua dang ky)
+
+// Bang anh chup. AmmoX de rieng vi moi chi so dan la mot ban tin doc lap —
+// gop chung vao csga_snap thi loai dan sau de mat loai dan truoc.
+static byte\tcsga_snap[CSGA_MAXPL][CSGA_NWHICH][CSGA_OWN_SIZE - 2];
+static byte\tcsga_snaplen[CSGA_MAXPL][CSGA_NWHICH];
+static byte\tcsga_ammo[CSGA_MAXPL][32];
+static byte\tcsga_ammoseen[CSGA_MAXPL][32];
+static int\tcsga_cursor[CSGA_MAXPL];\t// con tro rai anh chup cho tung client; -1 = xong
+static byte\tcsga_seen_cl[CSGA_MAXPL];\t// client nay da duoc phat anh chup lan dau chua
+static double\tcsga_next_key;
+
+static void CSGA_WriteOwn( sv_client_t *cl, int which, int owner, const byte *pay, int paylen )
+{
+\tbyte\t\tbuf[MAX_USERMSG_LENGTH];
+\tsizebuf_t\tsb;
+\tint\t\ti;
+
+\tif( paylen <= 0 || paylen > CSGA_OWN_SIZE - 2 )
+\t\treturn;
+\tif( MSG_GetNumBytesLeft( &cl->netchan.message ) < CSGA_OWN_SIZE + 64 )
+\t\treturn;
+
+\tMSG_InitExt( &sb, "CSGAOwn", buf, sizeof( buf ), -1 );
+\tMSG_WriteCmdExt( &sb, csga_own_num, NS_SERVER, "CSGAOwn" );
+\t// KHONG dung ban tin bien: truong do dai duoc ma hoa KHAC NHAU theo giao
+\t// thuc — cl_parse.c: proto GoldSrc doc BYTE, xash goc doc WORD. Client web
+\t// chay proto GoldSrc (49); ghi word thi no doc lech 1 byte va TOAN BO luong
+\t// goi sau do sai, client dung im khong bao loi (may ghi chet cam 2026-08-08).
+\tMSG_WriteByte( &sb, which );
+\tMSG_WriteByte( &sb, owner );
+\tMSG_WriteBytes( &sb, pay, paylen );
+\tfor( i = paylen; i < CSGA_OWN_SIZE - 2; i++ )
+\t\tMSG_WriteByte( &sb, 0 );\t// dem cho du kich thuoc co dinh
+
+\tMSG_WriteBits( &cl->netchan.message, MSG_GetData( &sb ), MSG_GetNumBitsWritten( &sb ));
+}
+
+static void CSGA_SnapStore( int owner, int which, const byte *pay, int paylen )
+{
+\tif( owner < 1 || owner >= CSGA_MAXPL || paylen <= 0 || paylen > CSGA_OWN_SIZE - 2 )
+\t\treturn;
+\tif( which == 2 )\t// AmmoX = [chi so dan][so vien]
+\t{
+\t\tif( paylen >= 2 && pay[0] < 32 )
+\t\t{
+\t\t\tcsga_ammo[owner][pay[0]] = pay[1];
+\t\t\tcsga_ammoseen[owner][pay[0]] = 1;
+\t\t}
+\t\treturn;
+\t}
+\tif( which < 1 || which >= CSGA_NWHICH )
+\t\treturn;
+\tmemcpy( csga_snap[owner][which], pay, paylen );
+\tcsga_snaplen[owner][which] = paylen;
+}
+
+// Gui MOT o trong khong gian anh chup. Tra ve true neu that su co gui.
+static qboolean CSGA_SendSlot( sv_client_t *cl, int idx )
+{
+\tint\tp = idx / CSGA_PER_PL;
+\tint\tk = idx % CSGA_PER_PL;
+\tbyte\tax[2];
+
+\tif( p < 1 || p >= CSGA_MAXPL )
+\t\treturn false;
+
+\tif( k < 4 )\t// o thuong: k 0,1,2,3 <-> which 1,3,4,5 (2 la AmmoX, di duong rieng)
+\t{
+\t\tint w = ( k == 0 ) ? 1 : k + 2;
+\t\tif( !csga_snaplen[p][w] )
+\t\t\treturn false;
+\t\tCSGA_WriteOwn( cl, w, p, csga_snap[p][w], csga_snaplen[p][w] );
+\t\treturn true;
+\t}
+
+\tif( !csga_ammoseen[p][k - 4] )
+\t\treturn false;
+\tax[0] = k - 4;
+\tax[1] = csga_ammo[p][k - 4];
+\tCSGA_WriteOwn( cl, 2, p, ax, 2 );
+\treturn true;
+}
+
+/* PHAI goi TRUOC SV_Multicast: ham do MSG_Clear( &sv.multicast ) o cuoi. */
+static void CSGA_MirrorToWatchers( void )
+{
+\tsv_client_t\t*cl;
+\tedict_t\t*owner = svgame.msg_ent;
+\tint\t\ti, paylen, ownidx;
+\tbyte\t\t*pay;
+
+\tif( !csga_which || !csga_own_num || csga_own_num == svc_bad || !SV_IsValidEdict( owner ))
+\t\treturn;
+
+\tpaylen = MSG_GetNumBytesWritten( &sv.multicast ) - csga_pay_off;
+\tif( paylen <= 0 || paylen > CSGA_OWN_SIZE - 2 )
+\t\treturn;\t// bon ban tin nay deu vai byte; dai bat thuong thi bo qua
+\tpay = MSG_GetData( &sv.multicast ) + csga_pay_off;
+\townidx = NUM_FOR_EDICT( owner );
+
+\t// Luu vao anh chup TRUOC — phai luu ke ca khi chua co may ghi nao noi vao,
+\t// vi dung cai lo hong ban dau la o cho do.
+\tCSGA_SnapStore( ownidx, csga_which, pay, paylen );
+
+\tfor( i = 0, cl = svs.clients; i < svs.maxclients; i++, cl++ )
+\t{
+\t\tif( cl->state != cs_spawned || !cl->edict )
+\t\t\tcontinue;
+\t\tif( FBitSet( cl->flags, FCL_FAKECLIENT ))
+\t\t\tcontinue;
+\t\t// chi may ghi (setinfo fullvis 1) — khong lo dan cua doi phuong
+\t\tif( !Q_atoi( Info_ValueForKey( cl->userinfo, "fullvis" )))
+\t\t\tcontinue;
+\t\tCSGA_WriteOwn( cl, csga_which, ownidx, pay, paylen );
+
+\t\t// Kem ban tin GOC khi client nay dang bam DUNG nguoi so huu: client cu
+\t\t// (chua hieu CSGAOwn) van hien duoc dan/giap ngay o che do xem truc
+\t\t// tiep. Duong gan nhan o tren danh cho replay bam nguoi bat ky.
+\t\tif( cl->edict->v.iuser2 == ownidx && cl->edict != owner )
+\t\t{
+\t\t\tif( MSG_GetNumBytesLeft( &cl->netchan.message ) >= paylen + 24 )
+\t\t\t\tMSG_WriteBits( &cl->netchan.message, MSG_GetData( &sv.multicast ), MSG_GetNumBitsWritten( &sv.multicast ));
+\t\t}
+\t}
+}
+
+/* Goi MOI KHUNG tu SV_SendClientMessages. Rai anh chup cho client fullvis. */
+void CSGA_KeyframeTick( void );	// khai bao truoc: tranh -Wmissing-prototypes
+void CSGA_KeyframeTick( void )
+{
+\tsv_client_t\t*cl;
+\tint\t\ti, sent;
+\tqboolean\tdue;
+
+\tif( !csga_own_num || csga_own_num == svc_bad )
+\t\treturn;
+
+\tdue = ( host.realtime >= csga_next_key );
+\tif( due )
+\t\tcsga_next_key = host.realtime + CSGA_KEY_SEC;
+
+\t// Nguoi da roi di thi xoa bang, keo o cua ho bi nguoi vao sau dung nham.
+\tif( due )
+\t{
+\t\tfor( i = 1; i < CSGA_MAXPL; i++ )
+\t\t{
+\t\t\tif( i <= svs.maxclients && svs.clients[i - 1].state == cs_spawned )
+\t\t\t\tcontinue;
+\t\t\tmemset( csga_snaplen[i], 0, sizeof( csga_snaplen[i] ));
+\t\t\tmemset( csga_ammoseen[i], 0, sizeof( csga_ammoseen[i] ));
+\t\t}
+\t}
+
+\tfor( i = 0, cl = svs.clients; i < svs.maxclients && i < CSGA_MAXPL; i++, cl++ )
+\t{
+\t\tif( cl->state != cs_spawned || FBitSet( cl->flags, FCL_FAKECLIENT ) ||
+\t\t\t!Q_atoi( Info_ValueForKey( cl->userinfo, "fullvis" )))
+\t\t{
+\t\t\tcsga_seen_cl[i] = 0;
+\t\t\tcsga_cursor[i] = -1;
+\t\t\tcontinue;
+\t\t}
+
+\t\tif( due || !csga_seen_cl[i] )
+\t\t{
+\t\t\tcsga_seen_cl[i] = 1;
+\t\t\tcsga_cursor[i] = CSGA_PER_PL;\t// bo qua nguoi 0 (world)
+\t\t}
+\t\tif( csga_cursor[i] < 0 )
+\t\t\tcontinue;
+
+\t\tsent = 0;
+\t\twhile( csga_cursor[i] < CSGA_SPACE && sent < CSGA_PER_TICK )
+\t\t{
+\t\t\tif( MSG_GetNumBytesLeft( &cl->netchan.message ) < CSGA_OWN_SIZE + 64 )
+\t\t\t\tbreak;\t// het cho — cho khung sau, KHONG duoc de tran
+\t\t\tif( CSGA_SendSlot( cl, csga_cursor[i] ))
+\t\t\t\tsent++;
+\t\t\tcsga_cursor[i]++;
+\t\t}
+\t\tif( csga_cursor[i] >= CSGA_SPACE )
+\t\t\tcsga_cursor[i] = -1;
+\t}
+}
+/* ==== het guong ==== */
+
+"""
+
 patch(
     "server/sv_game.c",
     "static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float *pOrigin, edict_t *ed )\n{",
-    "/* ==== CSGA: guong dan/giap/tien sang may ghi, co gan nhan chu so huu ==== */\n"
-    "#define CSGA_OWN_SIZE\t16\t// [which][chi so nguoi][payload...] — CO DINH\n"
-    "static int csga_which;\t\t// 1=CurWeapon 2=AmmoX 3=Battery 4=Money 5=Health, 0=khong guong\n"
-    "static int csga_pay_off;\t// vi tri byte dau payload trong sv.multicast\n"
-    "static int csga_own_num;\t// so hieu ban tin CSGAOwn (0 = chua dang ky)\n"
-    "\n"
-    "/* PHAI goi TRUOC SV_Multicast: ham do MSG_Clear( &sv.multicast ) o cuoi. */\n"
-    "static void CSGA_MirrorToWatchers( void )\n"
-    "{\n"
-    "\tsv_client_t\t*cl;\n"
-    "\tedict_t\t*owner = svgame.msg_ent;\n"
-    "\tbyte\t\tbuf[MAX_USERMSG_LENGTH];\n"
-    "\tsizebuf_t\tsb;\n"
-    "\tint\t\ti, paylen;\n"
-    "\tbyte\t\t*pay;\n"
-    "\n"
-    "\tif( !csga_which || !csga_own_num || csga_own_num == svc_bad || !SV_IsValidEdict( owner ))\n"
-    "\t\treturn;\n"
-    "\n"
-    "\tpaylen = MSG_GetNumBytesWritten( &sv.multicast ) - csga_pay_off;\n"
-    "\tif( paylen <= 0 || paylen > CSGA_OWN_SIZE - 2 )\n"
-    "\t\treturn;\t// bon ban tin nay deu vai byte; dai bat thuong thi bo qua\n"
-    "\tpay = MSG_GetData( &sv.multicast ) + csga_pay_off;\n"
-    "\n"
-    "\tMSG_InitExt( &sb, \"CSGAOwn\", buf, sizeof( buf ), -1 );\n"
-    "\tMSG_WriteCmdExt( &sb, csga_own_num, NS_SERVER, \"CSGAOwn\" );\n"
-    "\t// KHONG dung ban tin bien: truong do dai duoc ma hoa KHAC NHAU theo giao\n"
-    "\t// thuc — cl_parse.c: proto GoldSrc doc BYTE, xash goc doc WORD. Client web\n"
-    "\t// chay proto GoldSrc (49); ghi word thi no doc lech 1 byte va TOAN BO luong\n"
-    "\t// goi sau do sai, client dung im khong bao loi (may ghi chet cam 2026-08-08).\n"
-    "\t// Kich thuoc CO DINH thi khong co truong do dai nao de ma lech.\n"
-    "\tMSG_WriteByte( &sb, csga_which );\n"
-    "\tMSG_WriteByte( &sb, NUM_FOR_EDICT( owner ));\n"
-    "\tMSG_WriteBytes( &sb, pay, paylen );\n"
-    "\tfor( i = paylen; i < CSGA_OWN_SIZE - 2; i++ )\n"
-    "\t\tMSG_WriteByte( &sb, 0 );\t// dem cho du kich thuoc co dinh\n"
-    "\n"
-    "\tfor( i = 0, cl = svs.clients; i < svs.maxclients; i++, cl++ )\n"
-    "\t{\n"
-    "\t\tif( cl->state != cs_spawned || !cl->edict )\n"
-    "\t\t\tcontinue;\n"
-    "\t\tif( FBitSet( cl->flags, FCL_FAKECLIENT ))\n"
-    "\t\t\tcontinue;\n"
-    "\t\t// chi may ghi (setinfo fullvis 1) — khong lo dan cua doi phuong\n"
-    "\t\tif( !Q_atoi( Info_ValueForKey( cl->userinfo, \"fullvis\" )))\n"
-    "\t\t\tcontinue;\n"
-    "\t\tif( MSG_GetNumBytesLeft( &cl->netchan.message ) < paylen + 24 )\n"
-    "\t\t\tcontinue;\n"
-    "\t\tMSG_WriteBits( &cl->netchan.message, MSG_GetData( &sb ), MSG_GetNumBitsWritten( &sb ));\n"
-    "\n"
-    "\t\t// Kem ban tin GOC khi client nay dang bam DUNG nguoi so huu: client cu\n"
-    "\t\t// (chua hieu CSGAOwn) van hien duoc dan/giap ngay o che do xem truc\n"
-    "\t\t// tiep. Duong gan nhan o tren danh cho replay bam nguoi bat ky.\n"
-    "\t\tif( cl->edict->v.iuser2 == NUM_FOR_EDICT( owner ) && cl->edict != owner )\n"
-    "\t\t\tMSG_WriteBits( &cl->netchan.message, MSG_GetData( &sv.multicast ), MSG_GetNumBitsWritten( &sv.multicast ));\n"
-    "\t}\n"
-    "}\n"
-    "/* ==== het guong ==== */\n"
-    "\n"
-    "static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float *pOrigin, edict_t *ed )\n{",
+    MIRROR_C
+    + "static void GAME_EXPORT pfnMessageBegin( int msg_dest, int msg_num, const float *pOrigin, edict_t *ed )\n{",
     "mirror-fn",
 )
+
 
 # --- 2. Danh dau ban tin can guong (theo TEN: so hieu do gamedll cap) ---
 patch(
@@ -201,6 +368,20 @@ patch(
     "\n"
     "\treturn svgame.msg[i].number;",
     "mirror-reg",
+)
+
+
+# --- 6. Goi keyframe MOI KHUNG ---
+# Khai bao prototype ngay tai cho goi thay vi sua header: mot moc, khong dung
+# den file .h nao — it be mat va de doc lai khi upstream doi.
+patch(
+    "server/sv_frame.c",
+    "\tSV_UpdateToReliableMessages ();\n",
+    "\tSV_UpdateToReliableMessages ();\n"
+    "\n"
+    "\t// CSGA: rai lai anh chup dan/giap/tien/mau cho may ghi (xem specmirror.py)\n"
+    "\t{ extern void CSGA_KeyframeTick( void ); CSGA_KeyframeTick(); }\n",
+    "mirror-tick",
 )
 
 print("specmirror.py: tat ca patch da ap")
