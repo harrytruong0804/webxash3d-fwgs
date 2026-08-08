@@ -142,6 +142,12 @@ static void CSGA_SnapStore( int owner, int which, const byte *pay, int paylen )
 \t}
 \tif( which < 1 || which >= CSGA_NWHICH )
 \t\treturn;
+\t// CurWeapon: gamedll gui MOT ban tin cho MOI khau trong tui, chi khau DANG
+\t// CAM co byte trang thai khac 0. Luu \"ban tin cuoi\" thi gan nhu chac chan
+\t// vo phai mot khau khong cam -> HUD dan trong. Do tren demo #20: cached
+\t// CurWeapon co p0=0. Chi luu khau dang cam.
+\tif( which == 1 && paylen >= 1 && !pay[0] )
+\t\treturn;
 \tmemcpy( csga_snap[owner][which], pay, paylen );
 \tcsga_snaplen[owner][which] = paylen;
 }

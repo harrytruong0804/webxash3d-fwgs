@@ -42,69 +42,80 @@ patch(
     """CSGA_Own — bang dan/giap/tien theo entity (ban tin CSGAOwn tu server fork)
 ====================
 */
-typedef struct { byte has, wstate, wid, clip; byte ammo[64]; int battery, money, health; } csga_own_t;
+/* GIU NGUYEN BYTE THO, khong giai ma roi ma hoa lai. Bai hoc 8/8: ban replay
+ * dau tach Health ra `int` roi phat lai bang 1 byte, trong khi ban tin that dai
+ * 2 byte -> client doc short tu dem 1 byte, tran, ra 0. HUD hien icon ma khong
+ * co so, dung hien tuong user bat duoc. Cu chep nguyen payload + do dai roi
+ * phat lai y het thi khong con cho nao de doan sai dinh dang. */
+#define CSGA_RAWMAX\t8
+typedef struct {
+\tbyte has;
+\tbyte len[6];\t\t\t/* which 1..5; which 2 (AmmoX) di duong rieng ben duoi */
+\tbyte raw[6][CSGA_RAWMAX];
+\tbyte ammolen[64];\t\t/* moi loai dan mot ban tin -> phai luu rieng tung loai */
+\tbyte ammoraw[64][CSGA_RAWMAX];
+} csga_own_t;
 static csga_own_t csga_own[65];
 static int csga_own_view;
+static const char *csga_nm[] = { "", "CurWeapon", "AmmoX", "Battery", "Money", "Health" };
 
 void CSGA_OwnStore( const byte *b, int len )
 {
-	static const char *nm[] = { "", "CurWeapon", "AmmoX", "Battery", "Money", "Health" };
-	int which = b[0], owner = b[1];
-	const byte *p = b + 2;
-	csga_own_t *o;
+\tint which = b[0], owner = b[1];
+\tconst byte *p = b + 2;
+\tcsga_own_t *o;
 
-	len -= 2;
-	if( owner < 1 || owner > 64 || which < 1 || which > 5 )
-		return;
-	o = &csga_own[owner];
-	o->has = 1;
-	/* DEBUG tam (go sau khi chot khong gian chi so): doi chieu owner voi
-	 * [HLKILL] de bat lech chi so — bug trao du lieu A<->B user bat 8/8. */
-	if( cls.demoplayback )
-		Con_Printf( "[CSGAOWN] w=%d own=%d view=%d p0=%d p1=%d\\n", which, owner, csga_own_view, p[0], len >= 2 ? p[1] : -1 );
-	switch( which )
-	{
-	case 1: if( len >= 3 ) { o->wstate = p[0]; o->wid = p[1]; o->clip = p[2]; } break;
-	case 2: if( len >= 2 && p[0] < 64 ) o->ammo[p[0]] = p[1]; break;
-	case 3: if( len >= 1 ) o->battery = p[0] | ( len >= 2 ? p[1] << 8 : 0 ); break;
-	case 4: if( len >= 4 ) o->money = p[0] | ( p[1] << 8 ) | ( p[2] << 16 ) | ( p[3] << 24 ); break;
-	case 5: if( len >= 1 ) o->health = p[0]; break;
-	}
-	/* dang xem dung nguoi nay -> phat ban tin goc ngay, HUD cap nhat tuc thi */
-	if( owner == csga_own_view && cls.demoplayback )
-		CL_DispatchUserMessage( nm[which], len, (void *)p );
+\tlen -= 2;
+\tif( owner < 1 || owner > 64 || which < 1 || which > 5 || len < 1 )
+\t\treturn;
+\tif( len > CSGA_RAWMAX )
+\t\tlen = CSGA_RAWMAX;
+\to = &csga_own[owner];
+\to->has = 1;
+\t/* DEBUG tam (go sau khi chot khong gian chi so): doi chieu owner voi
+\t * [HLKILL] de bat lech chi so — bug trao du lieu A<->B user bat 8/8. */
+\tif( cls.demoplayback )
+\t\tCon_Printf( "[CSGAOWN] w=%d own=%d view=%d len=%d p0=%d p1=%d\\n", which, owner, csga_own_view, len, p[0], len >= 2 ? p[1] : -1 );
+
+\tif( which == 2 )
+\t{
+\t\tif( p[0] < 64 )
+\t\t{
+\t\t\tmemcpy( o->ammoraw[p[0]], p, len );
+\t\t\to->ammolen[p[0]] = len;
+\t\t}
+\t}
+\telse
+\t{
+\t\tmemcpy( o->raw[which], p, len );
+\t\to->len[which] = len;
+\t}
+
+\t/* dang xem dung nguoi nay -> phat ban tin goc ngay, HUD cap nhat tuc thi */
+\tif( owner == csga_own_view && cls.demoplayback )
+\t\tCL_DispatchUserMessage( csga_nm[which], len, (void *)p );
 }
 
 void CSGA_OwnReplay( int ent )
 {
-	csga_own_t *o;
-	byte b[8];
-	int i;
+\tcsga_own_t *o;
+\tint i, w;
 
-	csga_own_view = ent;
-	if( ent < 1 || ent > 64 )
-		return;
-	o = &csga_own[ent];
-	if( !o->has )
-		return;
-	b[0] = o->wstate; b[1] = o->wid; b[2] = o->clip;
-	CL_DispatchUserMessage( "CurWeapon", 3, b );
-	for( i = 0; i < 64; i++ )
-	{
-		if( !csga_own[ent].ammo[i] )
-			continue;
-		b[0] = (byte)i; b[1] = o->ammo[i];
-		CL_DispatchUserMessage( "AmmoX", 2, b );
-	}
-	b[0] = o->battery & 0xff; b[1] = ( o->battery >> 8 ) & 0xff;
-	CL_DispatchUserMessage( "Battery", 2, b );
-	b[0] = o->money & 0xff; b[1] = ( o->money >> 8 ) & 0xff;
-	b[2] = ( o->money >> 16 ) & 0xff; b[3] = ( o->money >> 24 ) & 0xff; b[4] = 1;
-	CL_DispatchUserMessage( "Money", 5, b );
-	/* Health cho BANNER spectator. KHONG dung de ghi cl.local.health — engine an
-	 * viewmodel+crosshair bang `cl.local.health <= 0` (hoi quy 8/8). */
-	b[0] = (byte)o->health;
-	CL_DispatchUserMessage( "Health", 1, b );
+\tcsga_own_view = ent;
+\tif( ent < 1 || ent > 64 )
+\t\treturn;
+\to = &csga_own[ent];
+\tif( !o->has )
+\t\treturn;
+
+\tif( o->len[1] )
+\t\tCL_DispatchUserMessage( csga_nm[1], o->len[1], (void *)o->raw[1] );
+\tfor( i = 0; i < 64; i++ )
+\t\tif( o->ammolen[i] )
+\t\t\tCL_DispatchUserMessage( csga_nm[2], o->ammolen[i], (void *)o->ammoraw[i] );
+\tfor( w = 3; w <= 5; w++ )
+\t\tif( o->len[w] )
+\t\t\tCL_DispatchUserMessage( csga_nm[w], o->len[w], (void *)o->raw[w] );
 }
 
 int CSGA_OwnHas( int ent )
