@@ -76,13 +76,6 @@ void CSGA_OwnStore( const byte *b, int len )
 \to->has = 1;
 \t/* DEBUG tam (go sau khi chot khong gian chi so): doi chieu owner voi
 \t * [HLKILL] de bat lech chi so — bug trao du lieu A<->B user bat 8/8. */
-\tif( cls.demoplayback )
-\t\t/* In DU 4 byte dau: voi CurWeapon thi SO DAN TRONG BANG nam o byte THU BA
-\t\t * (state, id, clip). Ban dau chi in p0/p1 nen do "ban ma dan khong doi"
-\t\t * bang mot cong cu mu dung cho can nhin (8/8). AmmoX la dan DU TRU, chi
-\t\t * doi khi thay bang — khong phai thu tut moi phat ban. */
-\t\tCon_Printf( "[CSGAOWN] w=%d own=%d view=%d len=%d p0=%d p1=%d p2=%d p3=%d\\n", which, owner, csga_own_view, len,
-\t\t\tp[0], len >= 2 ? p[1] : -1, len >= 3 ? p[2] : -1, len >= 4 ? p[3] : -1 );
 
 \tif( which == 2 )
 \t{
@@ -272,54 +265,6 @@ patch(
     "own-fallback",
 )
 
-# --- 5. (GO BO) Banner mau: TUYET DOI khong ghi cl.local.health = 0 ---
-# Ban truoc bo chot ">0" de banner theo nguoi xem. SAI NANG: entity_state.health
-# LUON = 0 trong demo (da do o ca #13 lan #16), ma engine/renderer an viewmodel +
-# crosshair bang dung idiom:
-#     if( cl.local.health <= 0 || cl.viewentity != cl.playernum + 1 ) return;
-# (thay o cl_game.c:875 CL_DrawCrosshair; renderer R_DrawViewModel giong het).
-# => copy health=0 la TU TAY an tay sung. Do chinh la hoi quy "mat tay sung khi
-# doi cam" user bat 8/8. Banner mau dung nguoi se giai bang duong KHAC: them
-# Health vao specmirror phia server (w=5) roi replay theo view.
-
-# --- 6. DEBUG tam: [DTE] moi giay — do hull/vel/hp/wm cua nguoi dang bam ---
-# Chot cau hoi crosshair di/ngoi: neu hull luon 0 va vel luon 0 thi du lieu
-# KHONG toi (delta/parse), con neu nhay dung thi loi nam o duong flags->dll.
-patch(
-    "engine/client/cl_frame.c",
-    "\t\t\t\tif( dte )\n"
-    "\t\t\t\t{\n"
-    "\t\t\t\t\tstatic int dc_last_ent, dc_last_wm = -1;",
-    "\t\t\t\tif( dte )\n"
-    "\t\t\t\t{\n"
-    "\t\t\t\t\tstatic float dc_dbg_t;\n"
-    "\t\t\t\t\tif( cl.time - dc_dbg_t > 1.0 )\n"
-    "\t\t\t\t\t{\n"
-    "\t\t\t\t\t\tdc_dbg_t = (float)cl.time;\n"
-    "\t\t\t\t\t\tCon_Printf( \"[DTE] e=%d hull=%d vel=%d hp=%d wm=%d | cd: vel=%d duck=%d fov=%d\\n\",\n"
-    "\t\t\t\t\t\t\tdc_view, dte->curstate.usehull, (int)VectorLength( dte->curstate.velocity ),\n"
-    "\t\t\t\t\t\t\t(int)dte->curstate.health, dte->curstate.weaponmodel,\n"
-    "\t\t\t\t\t\t\t(int)VectorLength( frame->clientdata.velocity ),\n"
-    "\t\t\t\t\t\t\t( frame->clientdata.flags & FL_DUCKING ) ? 1 : 0,\n"
-    "\t\t\t\t\t\t\t(int)frame->clientdata.fov );\n"
-    "\t\t\t\t\t\t/* Do cao goc nhin: NGOI thi thap hon ~18 don vi. Day la cach\n"
-    "\t\t\t\t\t\t * DUY NHAT khong the cai de biet hull=1 that su la ngoi hay\n"
-    "\t\t\t\t\t\t * dung — gia dinh chua bao gio kiem cua ta (8/8). */\n"
-    "\t\t\t\t\t\tCon_Printf( \"[Z] hull=%d org_z=%d view_z=%d\\n\", dte->curstate.usehull,\n"
-    "\t\t\t\t\t\t\t(int)dte->origin[2], (int)( dte->origin[2] + frame->clientdata.view_ofs[2] ));\n"
-    "\t\t\t\t\t\t#if 0\n"
-    "\t\t\t\t\t\tCon_Printf( \"[DTE] e=%d hull=%d vel=%d hp=%d wm=%d\\n\", dc_view,\n"
-    "\t\t\t\t\t\t\tdte->curstate.usehull, (int)VectorLength( dte->curstate.velocity ),\n"
-    "\t\t\t\t\t\t\t(int)dte->curstate.health, dte->curstate.weaponmodel );\n"
-    "\t\t\t\t\t\t#endif\n"
-    "\t\t\t\t\t}\n"
-    "\t\t\t\t}\n"
-    "\t\t\t\tif( dte )\n"
-    "\t\t\t\t{\n"
-    "\t\t\t\t\tstatic int dc_last_ent, dc_last_wm = -1;",
-    "own-dte-debug",
-)
-
 # --- 7. VIEWMODEL: sung cua nguoi dang bam, do ENGINE cap moi frame ---
 # User bat quy luat vang: /replay (engine cu, chua nuot untagged) doi cam KHONG
 # mat sung — vi luong CurWeapon untagged lam dll tuong MINH cam sung va tu ve.
@@ -332,7 +277,7 @@ patch(
     "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n",
     "\t\t\t\t\tint wm = dte->curstate.weaponmodel;\n"
     "\t\t\t\t\t{\n"
-    "\t\t\t\t\t\tstatic int vm_last_wm = -1, vm_last_idx, vm_dbg_wm = -1;\n"
+    "\t\t\t\t\t\tstatic int vm_last_wm = -1, vm_last_idx;\n"
     "\t\t\t\t\t\tif( wm != vm_last_wm )\n"
     "\t\t\t\t\t\t{\n"
     "\t\t\t\t\t\t\tmodel_t *pm2 = wm ? CL_ModelHandle( wm ) : NULL;\n"
@@ -360,11 +305,6 @@ patch(
     "\t\t\t\t\t\t * p_->v_ va se ve neu no tim duoc). */\n"
     "\t\t\t\t\t\tif( vm_last_idx )\n"
     "\t\t\t\t\t\t\tframe->clientdata.viewmodel = vm_last_idx;\n"
-    "\t\t\t\t\t\tif( wm != vm_dbg_wm )\n"
-    "\t\t\t\t\t\t{\n"
-    "\t\t\t\t\t\t\tvm_dbg_wm = wm;\n"
-    "\t\t\t\t\t\t\tCon_Printf( \"[VM] wm=%d -> vmidx=%d\\n\", wm, vm_last_idx );\n"
-    "\t\t\t\t\t\t}\n"
     "\t\t\t\t\t}\n",
     "own-viewmodel",
 )
@@ -407,25 +347,6 @@ patch(
     "\t\t\t\t\t\t * curstate.health=100 va phat lai SpecHealth deu khong len so).\n"
     "\t\t\t\t\t\t * Keo iuser2 ve dung nguoi dang bam. */\n"
     "\t\t\t\t\t\tframe->playerstate[cl.playernum].iuser2 = dc_view;\n"
-    "\t\t\t\t\t\t/* WEAPONDATA ngay tai KHUNG PHAN TICH — nhoi o predicted-from\n"
-    "\t\t\t\t\t\t * (muc 13) chua toi cho dll doc: do [XH] van thay he so x1.4\n"
-    "\t\t\t\t\t\t * cua che do BAN LOAT Glock khi ngoi (khe 17.5 = 8*1.4*1.375+2,\n"
-    "\t\t\t\t\t\t * dung 13 = 8*1.375+2). m_iWeaponState rac lam GetWeaponAccuracy\n"
-    "\t\t\t\t\t\t * Flags tra bo co ban loat: them x1.4 va MAT ACCURACY_DUCK. */\n"
-    "\t\t\t\t\t\t{\n"
-    "\t\t\t\t\t\t\textern int CSGA_OwnCurWeapon( int ent, int *st, int *id, int *clip );\n"
-    "\t\t\t\t\t\t\tint st2, id2, clip2;\n"
-    "\t\t\t\t\t\t\tif( CSGA_OwnCurWeapon( dc_view, &st2, &id2, &clip2 ))\n"
-    "\t\t\t\t\t\t\t{\n"
-    "\t\t\t\t\t\t\t\tmemset( frame->weapondata, 0, sizeof( frame->weapondata ));\n"
-    "\t\t\t\t\t\t\t\tif( id2 >= 0 && id2 < MAX_LOCAL_WEAPONS )\n"
-    "\t\t\t\t\t\t\t\t{\n"
-    "\t\t\t\t\t\t\t\t\tframe->weapondata[id2].m_iId = id2;\n"
-    "\t\t\t\t\t\t\t\t\tframe->weapondata[id2].m_iClip = clip2;\n"
-    "\t\t\t\t\t\t\t\t}\n"
-    "\t\t\t\t\t\t\t\tframe->clientdata.m_iId = id2;\n"
-    "\t\t\t\t\t\t\t}\n"
-    "\t\t\t\t\t\t}\n"
     "\t\t\t\t\t\t/* MAU CANH GIAP: cs16-client KHONG hook ban tin ten \"Health\" —\n"
     "\t\t\t\t\t\t * do bang ten ban tin trong client wasm: co AmmoX/Battery/\n"
     "\t\t\t\t\t\t * CurWeapon/Money/ScoreInfo/SpecHealth, KHONG co Health. Mau cua\n"
@@ -472,13 +393,10 @@ print("csga-own.py: tat ca patch da ap")
 # CHI ghi de khi co du lieu that (>0) de khong bao gio tu tay dat mau ve 0.
 patch(
     "engine/client/cl_frame.c",
+    "\t\t\t\tcl_entity_t *dte = dc_view > 0 ? CL_GetEntityByIndex( dc_view ) : NULL;\n",
+    "\t\t\t\tcl_entity_t *dte = dc_view > 0 ? CL_GetEntityByIndex( dc_view ) : NULL;\n"
     "\t\t\t\tif( dte )\n"
     "\t\t\t\t{\n"
-    "\t\t\t\t\tstatic float dc_dbg_t;\n",
-    "\t\t\t\tif( dte )\n"
-    "\t\t\t\t{\n"
-    "\t\t\t\t\tstatic float dc_dbg_t;\n"
-    "\t\t\t\t\t{\n"
     "\t\t\t\t\t\textern int CSGA_OwnHealth( int ent );\n"
     "\t\t\t\t\t\tint csga_hp = CSGA_OwnHealth( dc_view );\n"
     "\t\t\t\t\t\tif( csga_hp > 0 )\n"
@@ -531,188 +449,6 @@ patch(
     "own-islocal",
 )
 
-# --- 11. Cho code vu khi cua dll CHAY khi phat demo spectator ---
-# cl_pmove.c:
-#     if( cls.state != ca_active || cls.spectator ) return;
-#     ...
-#     clgame.dllFuncs.pfnPostRunCmd( from, to, &cmd, runfuncs, *time, random_seed );
-# `pfnPostRunCmd` -> HUD_PostRunCmd -> HUD_WeaponsPostThink, la NOI DUY NHAT gan
-#     g_iPlayerFlags  = from->client.flags;
-#     g_flPlayerSpeed = from->client.velocity.Length();
-# ma ammo.cpp dung de quyet dinh do rong tam ngam (ngoi *0.5, chay nhanh *1.5,
-# tren khong *2). Demo cua may ghi la demo SPECTATOR nen ham thoat ngay dong dau
-# => hai bien do KHONG BAO GIO duoc cap nhat. Do la ly do nhoi FL_DUCKING va
-# van toc vao clientdata deu vo hieu: dung du lieu, nhung khong ai doc.
-#
-# Chi mo cho DEMO. Spectator TRUC TIEP van thoat nhu cu (khong dung toi).
-# An toan: `CL_IsPredicted()` van false khi phat demo nen khoi pfnPlayerMove
-# KHONG chay — chi rieng pfnPostRunCmd duoc goi, dung thu ta can.
-patch(
-    "engine/client/cl_pmove.c",
-    "\tif( cls.state != ca_active || cls.spectator )\n"
-    "\t\treturn;\n",
-    "\tif( cls.state != ca_active || ( cls.spectator && !cls.demoplayback ))\n"
-    "\t\treturn;\t/* xem csga-own.py muc 11 */\n",
-    "own-postruncmd",
-)
-
-# --- 12. DEBUG: in co FL_DUCKING DUNG CHO dll doc ---
-# HUD_WeaponsPostThink lay `from->client.flags`. Ta ghi co o cl_frame.c, nhung
-# giua do va day con di qua CL_RunUsercmd (`*to = *from`, CL_FinishPMove...).
-# Tu khi mo CL_PredictMovement cho demo (muc 11) duong nay MOI chay, nen rat co
-# the no tinh lai co tu tu the cua MAY GHI va de len gia tri ta ghi.
-# Do duoc: replay dao dau so voi choi that (dung 9 = hep, ngoi 13 = rong) —
-# khop voi kha nang "dung thi dll nhan FL_DUCKING, ngoi thi khong".
-patch(
-    "engine/client/cl_pmove.c",
-    "\tclgame.dllFuncs.pfnPostRunCmd( from, to, &cmd, runfuncs, *time, random_seed );\n",
-    "\tif( cls.demoplayback )\n"
-    "\t{\n"
-    "\t\tstatic double csga_dbg_t;\n"
-    "\t\tif( cl.time - csga_dbg_t > 1.0 )\n"
-    "\t\t{\n"
-    "\t\t\tcsga_dbg_t = cl.time;\n"
-    "\t\t\tCon_Printf( \"[PRC] from_duck=%d to_duck=%d from_ground=%d vel=%d\\n\",\n"
-    "\t\t\t\t( from->client.flags & FL_DUCKING ) ? 1 : 0,\n"
-    "\t\t\t\t( to->client.flags & FL_DUCKING ) ? 1 : 0,\n"
-    "\t\t\t\t( from->client.flags & FL_ONGROUND ) ? 1 : 0,\n"
-    "\t\t\t\t(int)VectorLength( from->client.velocity ));\n"
-    "\t\t}\n"
-    "\t}\n"
-    "\tclgame.dllFuncs.pfnPostRunCmd( from, to, &cmd, runfuncs, *time, random_seed );\n",
-    "own-prc-debug",
-)
-
-# --- 13. Bom WEAPONDATA cua nguoi dang bam vao prediction ---
-# Mat xich cuoi cua vu tam ngam nguoc (do 8/8):
-#   cs_weapons.cpp: g_iWeaponFlags = pWeapon->m_iWeaponState;   // tu from->weapondata[]
-#   ammo.cpp/Glock: (xhairWeaponFlags & 2) ? BAN LOAT (x1.4) : thuong (ngoi x0.5)
-# `weapondata` la du lieu prediction cua NGUOI CHOI CUC BO — may ghi la spectator
-# nen vung nay rong/rac. Do duoc 13/9 ≈ 1.44 ≈ x1.4: dang an nham bo co ban loat
-# tu rac do. Ta da bom clientdata (mau/co/van toc) nhung CHUA tung dong toi
-# weapondata — day la khe cuoi.
-# a) accessor doc bang csga_own (dinh nghia canh CSGA_OwnHealth)
-patch(
-    "engine/client/cl_parse.c",
-    "int CSGA_OwnHas( int ent )",
-    "int CSGA_OwnCurWeapon( int ent, int *st, int *id, int *clip )\n"
-    "{\n"
-    "\tcsga_own_t *o;\n"
-    "\n"
-    "\tif( ent < 1 || ent > 64 )\n"
-    "\t\treturn 0;\n"
-    "\to = &csga_own[ent];\n"
-    "\tif( o->len[1] < 3 )\n"
-    "\t\treturn 0;\n"
-    "\t*st = o->raw[1][0]; *id = o->raw[1][1]; *clip = o->raw[1][2];\n"
-    "\treturn 1;\n"
-    "}\n"
-    "\n"
-    "int CSGA_OwnHas( int ent )",
-    "own-curweapon-accessor",
-)
-# b) tiem vao prediction ngay sau khi engine chep frame cua may ghi
-patch(
-    "engine/client/cl_pmove.c",
-    "\tmemcpy( from->weapondata, frame->weapondata, sizeof( from->weapondata ));\n"
-    "\tfrom->playerstate = frame->playerstate[cl.playernum];\n"
-    "\tfrom->client = frame->clientdata;\n",
-    "\tmemcpy( from->weapondata, frame->weapondata, sizeof( from->weapondata ));\n"
-    "\tfrom->playerstate = frame->playerstate[cl.playernum];\n"
-    "\tfrom->client = frame->clientdata;\n"
-    "\n"
-    "\t/* CSGA: prediction phai nhin thay khau sung cua NGUOI DANG BAM, khong\n"
-    "\t * phai vung rong/rac cua may ghi (xem csga-own.py muc 13). */\n"
-    "\tif( cls.demoplayback )\n"
-    "\t{\n"
-    "\t\textern int democam_target;\n"
-    "\t\textern int CSGA_OwnCurWeapon( int ent, int *st, int *id, int *clip );\n"
-    "\t\tint st, id, clip;\n"
-    "\t\tint tgt = democam_target > 0 ? democam_target : frame->clientdata.iuser2;\n"
-    "\t\tif( tgt > 0 && CSGA_OwnCurWeapon( tgt, &st, &id, &clip ))\n"
-    "\t\t{\n"
-    "\t\t\tmemset( from->weapondata, 0, sizeof( from->weapondata ));\n"
-    "\t\t\tif( id >= 0 && id < MAX_LOCAL_WEAPONS )\n"
-    "\t\t\t{\n"
-    "\t\t\t\tfrom->weapondata[id].m_iId = id;\n"
-    "\t\t\t\tfrom->weapondata[id].m_iClip = clip;\n"
-    "\t\t\t\tfrom->weapondata[id].m_iWeaponState = 0;\t/* trang thai SACH */\n"
-    "\t\t\t}\n"
-    "\t\t\tfrom->client.m_iId = id;\n"
-    "\t\t}\n"
-    "\t}\n",
-    "own-weapondata",
-)
-
-# --- 14. DEBUG: in TOA DO THAT cua tam ngam tu lenh ve ---
-# Do pixel qua anh chup + loc mau da lua ta nhieu lan (0 mau, nguong, nen khac
-# nhau). Chan thang CL_FillRGBA: khi phat demo va mau XANH LA troi (tam ngam CS
-# ve bang cac vach chu nhat qua ham nay), in x/y/w/h — con so CHINH XAC ma dll
-# tinh ra, khong qua anh. Doi chieu voi [PRC] (co dll nhan) se thay tang nao lech.
-patch(
-    "engine/client/cl_game.c",
-    "static void GAME_EXPORT CL_FillRGBA( int x, int y, int w, int h, int r, int g, int b, int a )\n{",
-    "static void GAME_EXPORT CL_FillRGBA( int x, int y, int w, int h, int r, int g, int b, int a )\n{\n"
-    "\t/* CSGA debug (xem csga-own.py muc 14). Ban dau throttle 0.5s bat LENH VE\n"
-    "\t * XANH DAU TIEN moi nhip — vo phai phan tu khac (y=256 trong khi tam man\n"
-    "\t * 226). Gio loc theo HINH DANG vach tam ngam: manh (1px mot chieu) va SAT\n"
-    "\t * TAM man hinh, in DU ca 4 vach cua cung mot khung, 1 khung moi giay. */\n"
-    "\tif( cls.demoplayback && g > r + 30 && g > b + 30 && ( w == 1 || h == 1 ))\n"
-    "\t{\n"
-    "\t\tint cx = refState.width / 2, cy = refState.height / 2;\n"
-    "\t\tif( abs( x + w / 2 - cx ) < 60 && abs( y + h / 2 - cy ) < 60 )\n"
-    "\t\t{\n"
-    "\t\t\tstatic double csga_xh_t; static int csga_xh_n;\n"
-    "\t\t\tif( cl.time - csga_xh_t > 1.0 ) { csga_xh_t = cl.time; csga_xh_n = 0; }\n"
-    "\t\t\tif( csga_xh_n < 4 )\n"
-    "\t\t\t{\n"
-    "\t\t\t\tcsga_xh_n++;\n"
-    "\t\t\t\tCon_Printf( \"[XH] x=%d y=%d w=%d h=%d cx=%d cy=%d\\n\", x, y, w, h, cx, cy );\n"
-    "\t\t\t}\n"
-    "\t\t}\n"
-    "\t}",
-    "own-xhair-debug",
-)
-
-# --- 15. DEBUG: in MOI lenh CurWeapon bom vao dll, kem nguon ---
-# [XH] cho thay: dung ve khe 3 (= hang 8 bang Distances, AUG?!), ngoi ve khe 7
-# (= hang co base 7, vd knife 29) — dll dang tinh cho KHAU KHAC voi khau ta
-# tuong. Nghi: mot trong ba nguon CurWeapon bom sai id, va no doi theo tu the.
-patch(
-    "engine/client/cl_parse.c",
-    "\tif( owner == csga_own_view && cls.demoplayback )\n"
-    "\t\tCL_DispatchUserMessage( csga_nm[which], len, (void *)p );",
-    "\tif( owner == csga_own_view && cls.demoplayback )\n"
-    "\t{\n"
-    "\t\tif( which == 1 )\n"
-    "\t\t\tCon_Printf( \"[CW] mirror st=%d id=%d clip=%d\\n\", p[0], len >= 2 ? p[1] : -1, len >= 3 ? p[2] : -1 );\n"
-    "\t\tCL_DispatchUserMessage( csga_nm[which], len, (void *)p );\n"
-    "\t}",
-    "own-cw-dbg-mirror",
-)
-patch(
-    "engine/client/cl_parse.c",
-    "\tif( o->len[1] )\n"
-    "\t\tCL_DispatchUserMessage( csga_nm[1], o->len[1], (void *)o->raw[1] );",
-    "\tif( o->len[1] )\n"
-    "\t{\n"
-    "\t\tCon_Printf( \"[CW] replay st=%d id=%d clip=%d\\n\", o->raw[1][0], o->raw[1][1], o->raw[1][2] );\n"
-    "\t\tCL_DispatchUserMessage( csga_nm[1], o->len[1], (void *)o->raw[1] );\n"
-    "\t}",
-    "own-cw-dbg-replay",
-)
-patch(
-    "engine/client/cl_frame.c",
-    "\t\t\t\t\t\t\tif( !CSGA_OwnHas( dc_view ))\n"
-    "\t\t\t\t\t\t\t\tCL_DispatchUserMessage( \"CurWeapon\", 3, wbuf );",
-    "\t\t\t\t\t\t\tif( !CSGA_OwnHas( dc_view ))\n"
-    "\t\t\t\t\t\t\t{\n"
-    "\t\t\t\t\t\t\t\tCon_Printf( \"[CW] synth st=%d id=%d\\n\", wbuf[0], wbuf[1] );\n"
-    "\t\t\t\t\t\t\t\tCL_DispatchUserMessage( \"CurWeapon\", 3, wbuf );\n"
-    "\t\t\t\t\t\t\t}",
-    "own-cw-dbg-synth",
-)
-
 # --- 16. SUA GOC tam ngam nguoc: ep lai co SAU pmove, TRUOC khi dll doc ---
 # Chuoi nhan qua (do tan tay 8/8, [PRC] fg/tg):
 #   ta ghi FL_DUCKING+FL_ONGROUND vao clientdata (dung) → prediction mo phong
@@ -725,9 +461,7 @@ patch(
 # pmove pha o giua deu bi ghi de lai.
 patch(
     "engine/client/cl_pmove.c",
-    "\tif( cls.demoplayback )\n"
-    "\t{\n"
-    "\t\tstatic double csga_dbg_t;",
+    "\tclgame.dllFuncs.pfnPostRunCmd( from, to, &cmd, runfuncs, *time, random_seed );\n",
     "\t/* CSGA: ep lai co theo NGUOI DANG BAM — xem csga-own.py muc 16 */\n"
     "\tif( cls.demoplayback )\n"
     "\t{\n"
@@ -743,9 +477,7 @@ patch(
     "\t\t\t}\n"
     "\t\t}\n"
     "\t}\n"
-    "\tif( cls.demoplayback )\n"
-    "\t{\n"
-    "\t\tstatic double csga_dbg_t;",
+    "\tclgame.dllFuncs.pfnPostRunCmd( from, to, &cmd, runfuncs, *time, random_seed );\n",
     "own-flags-after-pmove",
 )
 
