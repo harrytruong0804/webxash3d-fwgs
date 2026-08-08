@@ -195,7 +195,13 @@ patch(
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
-    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Health" )\n'
+    # THU NGHIEM 8/8: TAM NGUNG nuot "Health". Cum mau goc trai duoi khong ve
+    # ICON "+" nao ca -> nghi CHudHealth chua tung duoc kich hoat, vi trong
+    # cs16-client chinh MsgFunc_Health moi bat co HUD_ACTIVE cho cum do; ma ta
+    # nuot sach ban tin nay khi phat demo. Neu bo nuot ma icon "+" hien ra (kem
+    # mau cua MAY GHI, tam thoi sai nguoi) => xac nhan cum chi thieu cu kich
+    # hoat, viec con lai chi la bom dung gia tri nguoi dang bam.
+
     # SpecHealth: BANNER spectator "<ten> (<mau>)" doc RIENG ban tin nay — khong
     # phai Health, cung khong phai entity_state.health (do 8/8: da ep
     # curstate.health = 100 ma banner van "(0)"). Ban ghi lai mang mau cua nguoi
