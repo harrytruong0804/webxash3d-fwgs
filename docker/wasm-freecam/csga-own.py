@@ -325,7 +325,13 @@ patch(
     "\t\t\t\t\t\t\tframe->clientdata.flags |= FL_DUCKING;\n"
     "\t\t\t\t\t\t/* cl_pmove doc usehull tu playerstate cua MAY GHI — dat luon vao\n"
     "\t\t\t\t\t\t * do thi cl.local.usehull moi mang tu the nguoi dang bam. */\n"
-    "\t\t\t\t\t\tframe->playerstate[cl.playernum].usehull = dte->curstate.usehull;\n",
+    "\t\t\t\t\t\tframe->playerstate[cl.playernum].usehull = dte->curstate.usehull;\n"
+    "\t\t\t\t\t\t/* BANNER \"<ten> (<mau>)\": dll doc muc tieu dang bam tu iuser2 cua\n"
+    "\t\t\t\t\t\t * CHINH NO, ma trong demo do la nguoi MAY GHI bam luc quay — khac\n"
+    "\t\t\t\t\t\t * nguoi democam dang bam, nen no tra mau cua o sai (do 8/8: ep\n"
+    "\t\t\t\t\t\t * curstate.health=100 va phat lai SpecHealth deu khong len so).\n"
+    "\t\t\t\t\t\t * Keo iuser2 ve dung nguoi dang bam. */\n"
+    "\t\t\t\t\t\tframe->playerstate[cl.playernum].iuser2 = dc_view;\n",
     "own-duck",
 )
 
