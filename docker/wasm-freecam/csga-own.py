@@ -118,6 +118,20 @@ void CSGA_OwnReplay( int ent )
 \t\t\tCL_DispatchUserMessage( csga_nm[w], o->len[w], (void *)o->raw[w] );
 }
 
+/* Mau da giai ma — CHI de vá banner spectator (xem patch own-banner-health).
+ * Luong phat lai cho HUD van la byte tho, khong dung ham nay. */
+int CSGA_OwnHealth( int ent )
+{
+\tcsga_own_t *o;
+
+\tif( ent < 1 || ent > 64 )
+\t\treturn 0;
+\to = &csga_own[ent];
+\tif( o->len[5] < 1 )
+\t\treturn 0;
+\treturn o->len[5] >= 2 ? ( o->raw[5][0] | ( o->raw[5][1] << 8 )) : o->raw[5][0];
+}
+
 int CSGA_OwnHas( int ent )
 {
 	return ent >= 1 && ent <= 64 && csga_own[ent].has;
@@ -301,3 +315,29 @@ patch(
 )
 
 print("csga-own.py: tat ca patch da ap")
+
+
+# --- 8. BANNER spectator: "<ten> (<mau>)" doc entity_state.health, KHONG doc
+# ban tin Health ---
+# Do duoc 8/8 tren demo #20: bang csga_own co mau=100 dung, HUD phat lai dung,
+# nhung banner van hien "(0)" — vi no lay tu `curstate.health` cua entity chu
+# khong phai tu ban tin Health. Server CO nhoi state->health (serverfill.py) ma
+# toi client van bang 0, chua ro tac nhan; va sua o client thi khong phai doi
+# ca image server nen vong lap kiem chung ngan hon.
+# CHI ghi de khi co du lieu that (>0) de khong bao gio tu tay dat mau ve 0.
+patch(
+    "engine/client/cl_frame.c",
+    "\t\t\t\tif( dte )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tstatic float dc_dbg_t;\n",
+    "\t\t\t\tif( dte )\n"
+    "\t\t\t\t{\n"
+    "\t\t\t\t\tstatic float dc_dbg_t;\n"
+    "\t\t\t\t\t{\n"
+    "\t\t\t\t\t\textern int CSGA_OwnHealth( int ent );\n"
+    "\t\t\t\t\t\tint csga_hp = CSGA_OwnHealth( dc_view );\n"
+    "\t\t\t\t\t\tif( csga_hp > 0 )\n"
+    "\t\t\t\t\t\t\tdte->curstate.health = csga_hp;\n"
+    "\t\t\t\t\t}\n",
+    "own-banner-health",
+)
