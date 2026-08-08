@@ -82,7 +82,7 @@ MIRROR_C = """/* ==== CSGA: guong dan/giap/tien sang may ghi, co gan nhan chu so
 #define CSGA_NWHICH\t6\t// which chay 1..5
 #define CSGA_PER_PL\t36\t// 4 o thuong + 32 o dan, cho mot nguoi
 #define CSGA_SPACE\t( CSGA_MAXPL * CSGA_PER_PL )
-#define CSGA_KEY_SEC\t5.0\t// bao lau phat lai anh chup mot lan
+#define CSGA_KEY_SEC\t60.0\t// bao lau phat lai anh chup mot lan (xem ghi chu)\n// 5.0 -> 60.0 (8/8): anh chup dinh ky vong 5 giay la THUA. Demo phat TUAN TU\n// tu dau va may ghi chi vao MOT lan, nen mot anh chup luc vao la du; ta dat\n// lap lai vi nghi toi viec "tua toi giua demo" — dieu khong xay ra.\n// Ma no con CO HAI: moi 5 giay nhoi ~130 ban tin vao kenh tin cay cua may\n// ghi, canh tranh voi du lieu entity trong cung goi. User bao mat hinh nhay\n// theo dung chu ky do khi bam nguoi thu hai, kem tieng "xet" — camera roi ve\n// goc nhin goc cua ban ghi (canh nguoi thu nhat) roi quay lai.\n// Giu 60s lam luoi an toan, dong thoi la PHEP THU: neu nhip nhay chay theo\n// 60 giay thi xac nhan dung nguyen nhan.
 #define CSGA_PER_TICK\t4\t// so ban tin toi da nhoi trong mot khung
 
 static int csga_which;\t\t// 1=CurWeapon 2=AmmoX 3=Battery 4=Money 5=Health, 0=khong guong

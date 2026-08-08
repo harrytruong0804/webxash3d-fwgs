@@ -77,7 +77,12 @@ void CSGA_OwnStore( const byte *b, int len )
 \t/* DEBUG tam (go sau khi chot khong gian chi so): doi chieu owner voi
 \t * [HLKILL] de bat lech chi so — bug trao du lieu A<->B user bat 8/8. */
 \tif( cls.demoplayback )
-\t\tCon_Printf( "[CSGAOWN] w=%d own=%d view=%d len=%d p0=%d p1=%d\\n", which, owner, csga_own_view, len, p[0], len >= 2 ? p[1] : -1 );
+\t\t/* In DU 4 byte dau: voi CurWeapon thi SO DAN TRONG BANG nam o byte THU BA
+\t\t * (state, id, clip). Ban dau chi in p0/p1 nen do "ban ma dan khong doi"
+\t\t * bang mot cong cu mu dung cho can nhin (8/8). AmmoX la dan DU TRU, chi
+\t\t * doi khi thay bang — khong phai thu tut moi phat ban. */
+\t\tCon_Printf( "[CSGAOWN] w=%d own=%d view=%d len=%d p0=%d p1=%d p2=%d p3=%d\\n", which, owner, csga_own_view, len,
+\t\t\tp[0], len >= 2 ? p[1] : -1, len >= 3 ? p[2] : -1, len >= 4 ? p[3] : -1 );
 
 \tif( which == 2 )
 \t{
@@ -214,12 +219,11 @@ patch(
     '\tif( cls.demoplayback && ( !Q_strcmp( clgame.msg[i].name, "CurWeapon" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "AmmoX" ) || !Q_strcmp( clgame.msg[i].name, "Battery" )\n'
     '\t\t|| !Q_strcmp( clgame.msg[i].name, "Money" ) || !Q_strcmp( clgame.msg[i].name, "ArmorType" )\n'
-    # THU NGHIEM 8/8: TAM NGUNG nuot "Health". Cum mau goc trai duoi khong ve
-    # ICON "+" nao ca -> nghi CHudHealth chua tung duoc kich hoat, vi trong
-    # cs16-client chinh MsgFunc_Health moi bat co HUD_ACTIVE cho cum do; ma ta
-    # nuot sach ban tin nay khi phat demo. Neu bo nuot ma icon "+" hien ra (kem
-    # mau cua MAY GHI, tam thoi sai nguoi) => xac nhan cum chi thieu cu kich
-    # hoat, viec con lai chi la bom dung gia tri nguoi dang bam.
+    # Nuot lai "Health" (thu nghiem 8/8 da xong): cum mau khong hien la do
+    # IsSpectateOnly, KHONG phai do thieu kich hoat — bo nuot van khong ra icon.
+    # Gio cong da mo, neu khong nuot thi ban tin Health cua CHINH MAY GHI se de
+    # len mau cua nguoi dang bam.
+    '\t\t|| !Q_strcmp( clgame.msg[i].name, "Health" )\n'
 
     # SpecHealth: BANNER spectator "<ten> (<mau>)" doc RIENG ban tin nay — khong
     # phai Health, cung khong phai entity_state.health (do 8/8: da ep
@@ -292,9 +296,17 @@ patch(
     "\t\t\t\t\tif( cl.time - dc_dbg_t > 1.0 )\n"
     "\t\t\t\t\t{\n"
     "\t\t\t\t\t\tdc_dbg_t = (float)cl.time;\n"
+    "\t\t\t\t\t\tCon_Printf( \"[DTE] e=%d hull=%d vel=%d hp=%d wm=%d | cd: vel=%d duck=%d fov=%d\\n\",\n"
+    "\t\t\t\t\t\t\tdc_view, dte->curstate.usehull, (int)VectorLength( dte->curstate.velocity ),\n"
+    "\t\t\t\t\t\t\t(int)dte->curstate.health, dte->curstate.weaponmodel,\n"
+    "\t\t\t\t\t\t\t(int)VectorLength( frame->clientdata.velocity ),\n"
+    "\t\t\t\t\t\t\t( frame->clientdata.flags & FL_DUCKING ) ? 1 : 0,\n"
+    "\t\t\t\t\t\t\t(int)frame->clientdata.fov );\n"
+    "\t\t\t\t\t\t#if 0\n"
     "\t\t\t\t\t\tCon_Printf( \"[DTE] e=%d hull=%d vel=%d hp=%d wm=%d\\n\", dc_view,\n"
     "\t\t\t\t\t\t\tdte->curstate.usehull, (int)VectorLength( dte->curstate.velocity ),\n"
     "\t\t\t\t\t\t\t(int)dte->curstate.health, dte->curstate.weaponmodel );\n"
+    "\t\t\t\t\t\t#endif\n"
     "\t\t\t\t\t}\n"
     "\t\t\t\t}\n"
     "\t\t\t\tif( dte )\n"
@@ -367,6 +379,15 @@ patch(
     "\t\t\t\t\t\t/* cl_pmove doc usehull tu playerstate cua MAY GHI — dat luon vao\n"
     "\t\t\t\t\t\t * do thi cl.local.usehull moi mang tu the nguoi dang bam. */\n"
     "\t\t\t\t\t\tframe->playerstate[cl.playernum].usehull = dte->curstate.usehull;\n"
+    "\t\t\t\t\t\t/* VAN TOC cho do rong tam ngam. cs16-client cs_wpn/cs_weapons.cpp:\n"
+    "\t\t\t\t\t\t *   g_iPlayerFlags  = from->client.flags;\n"
+    "\t\t\t\t\t\t *   g_flPlayerSpeed = from->client.velocity.Length();\n"
+    "\t\t\t\t\t\t * ca hai deu lay tu clientdata — tuc cua MAY GHI. Chi ghi de co\n"
+    "\t\t\t\t\t\t * FL_DUCKING ma bo van toc thi nhanh \"chay nhanh -> gian x1.5\"\n"
+    "\t\t\t\t\t\t * (ammo.cpp) van an theo may ghi — con bot bay va bi day\n"
+    "\t\t\t\t\t\t * +moveleft moi 120s de chong autokick. Do 8/8: ngoi 22px > dung\n"
+    "\t\t\t\t\t\t * 16px, nguoc han le thuong (ngoi phai *0.5). */\n"
+    "\t\t\t\t\t\tVectorCopy( dte->curstate.velocity, frame->clientdata.velocity );\n"
     "\t\t\t\t\t\t/* BANNER \"<ten> (<mau>)\": dll doc muc tieu dang bam tu iuser2 cua\n"
     "\t\t\t\t\t\t * CHINH NO, ma trong demo do la nguoi MAY GHI bam luc quay — khac\n"
     "\t\t\t\t\t\t * nguoi democam dang bam, nen no tra mau cua o sai (do 8/8: ep\n"
@@ -447,4 +468,33 @@ patch(
     "\treturn (cls.spectator != 0) || cls.demoplayback;",
     "\treturn (cls.spectator != 0);\t/* KHONG them demoplayback: xem csga-own.py muc 9 */",
     "own-spectate-only",
+)
+
+
+# --- 10. pfnIsLocal: coi NGUOI DANG BAM la "cuc bo" khi phat demo ---
+# cs16-client cl_dll/events/event_*.cpp:
+#     if( EV_IsLocal( idx ) ) { ++g_iShotsFired; EV_MuzzleFlash(); ... }
+# Luc phat demo, `idx` la nguoi BAN (entity khac) con cl.playernum la may ghi,
+# nen dieu kien LUON SAI: `g_iShotsFired` khong bao gio tang, ma ammo.cpp chi
+# NO tam ngam khi bien do tang — con lai thi CO. Dung trieu chung "ban ma tam
+# ngam khong no ra co vao" (user bao 8/8).
+#
+# Day la he qua cua mo hinh da chon: ta cho dll TIN rang client cuc bo CHINH LA
+# nguoi dang bam (vi CS 1.6 khong co duong nao chuyen dan/tien cua nguoi bi bam
+# sang spectator). Da chon mo hinh do thi phai nhat quan ca o day, khong thi
+# moi thu khac dung ma rieng hieu ung sung lai chay theo may ghi.
+#
+# `playernum` la chi so 0-based; `democam_target` la chi so ENTITY (1-based).
+patch(
+    "engine/client/cl_game.c",
+    "static int GAME_EXPORT pfnIsLocal( int playernum )\n"
+    "{\n"
+    "\tif( playernum == cl.playernum )\n",
+    "static int GAME_EXPORT pfnIsLocal( int playernum )\n"
+    "{\n"
+    "\textern int democam_target;\t/* xem csga-own.py muc 10 */\n"
+    "\tif( cls.demoplayback && democam_target > 0 && playernum == democam_target - 1 )\n"
+    "\t\treturn true;\n"
+    "\tif( playernum == cl.playernum )\n",
+    "own-islocal",
 )
