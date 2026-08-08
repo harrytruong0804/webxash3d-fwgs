@@ -331,7 +331,23 @@ patch(
     "\t\t\t\t\t\t * nguoi democam dang bam, nen no tra mau cua o sai (do 8/8: ep\n"
     "\t\t\t\t\t\t * curstate.health=100 va phat lai SpecHealth deu khong len so).\n"
     "\t\t\t\t\t\t * Keo iuser2 ve dung nguoi dang bam. */\n"
-    "\t\t\t\t\t\tframe->playerstate[cl.playernum].iuser2 = dc_view;\n",
+    "\t\t\t\t\t\tframe->playerstate[cl.playernum].iuser2 = dc_view;\n"
+    "\t\t\t\t\t\t/* MAU CANH GIAP: cs16-client KHONG hook ban tin ten \"Health\" —\n"
+    "\t\t\t\t\t\t * do bang ten ban tin trong client wasm: co AmmoX/Battery/\n"
+    "\t\t\t\t\t\t * CurWeapon/Money/ScoreInfo/SpecHealth, KHONG co Health. Mau cua\n"
+    "\t\t\t\t\t\t * nguoi choi that di qua clientdata.health chu khong qua ban tin,\n"
+    "\t\t\t\t\t\t * nen moi lenh CL_DispatchUserMessage(\"Health\") deu roi vao hu\n"
+    "\t\t\t\t\t\t * khong. Ghi thang vao day.\n"
+    "\t\t\t\t\t\t * Ban va cu ghi vao day roi MAT TAY SUNG — nhung loi la o GIA TRI\n"
+    "\t\t\t\t\t\t * (lay tu entity_state.health, luon = 0) chu khong o cho ghi:\n"
+    "\t\t\t\t\t\t * engine an viewmodel bang `cl.local.health <= 0`. Gio lay mau\n"
+    "\t\t\t\t\t\t * that tu bang csga_own va CHI ghi khi > 0. */\n"
+    "\t\t\t\t\t\t{\n"
+    "\t\t\t\t\t\t\textern int CSGA_OwnHealth( int ent );\n"
+    "\t\t\t\t\t\t\tint hp2 = CSGA_OwnHealth( dc_view );\n"
+    "\t\t\t\t\t\t\tif( hp2 > 0 )\n"
+    "\t\t\t\t\t\t\t\tframe->clientdata.health = hp2;\n"
+    "\t\t\t\t\t\t}\n",
     "own-duck",
 )
 
