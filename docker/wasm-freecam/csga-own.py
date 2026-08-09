@@ -684,3 +684,93 @@ patch(
     "own-autopick-reset",
 )
 
+
+
+# --- 22+23. GUI spectator khi xem lai: an hai dai den, keo dong ten len tren ---
+#
+# `cs16-client` la wasm DUNG SAN (khong build tu nguon) nen khong sua thang
+# duoc. Nhung ca hai thu deu ve qua HAM CUA ENGINE, nen chan o day duoc:
+#   - hai dai den : spectator_gui.cpp:141-142 goi FillRGBABlend, mau (0,0,0,153)
+#                   (chu thich goc cua ho: "at first, draw these silly black bars")
+#   - dong ten    : spectator_gui.cpp:223 goi DrawHudString -> tung ky tu qua
+#                   gEngfuncs.pfnDrawCharacter, tai y = INT_YPOS(9) ~ 0.9*H
+#                   (INT_YPOS(y) = y/10 * ScreenHeight, luoi 16x10)
+#
+# Nhan dang an toan:
+#   - dai den: den tuyet doi + alpha DUNG 153 + rong hon nua man + cham mep tren
+#     hoac duoi. Da grep toan bo cl_dll: to hop mau nay khong dung o dau khac.
+#   - dong ten: y nam trong dai hep quanh 0.9*H. HUD duoi (mau/giap/tien/dan) ve
+#     bang SPRITE (SPR_DrawAdditive), khong qua pfnDrawCharacter nen khong bi keo
+#     theo; chu notify da tat bang `con_notifytime 0` truoc khi phat.
+#
+# MAC DINH GIU NGUYEN BAN GOC. Hai cai nay chi dung cho VIDEO HIGHLIGHT —
+# noi khung hinh phai sach de dang len FB/Discord. Trang /replay va inspect luc
+# dang choi thi de y nguyen: nguoi xem o do can dung thu nguoi choi da thay,
+# va hai dai den + dong ten o day la mot phan cua giao dien CS that.
+#   csga_specbars   1 = giu hai dai (MAC DINH) | 0 = an
+#   csga_specname_y 0 = ten o cho cu (MAC DINH)| 0.035 = keo len sat mep tren
+# Bat len o `autoclip4.mjs` / `autoclip5.mjs`, ngay truoc khi bat dau quay.
+# Bo FCVAR_ARCHIVE de moi phien luon khoi dong tu mac dinh, khong bi mot lan
+# nghich tay dinh lai vao config.
+
+# Khai bao o DAU cl_game.c: pfnDrawCharacter (~dong 2000) dung truoc
+# CL_FillRGBABlend (~dong 3172), dat canh FillRGBABlend thi ham tren bao
+# "use of undeclared identifier".
+patch(
+    "engine/client/cl_game.c",
+    "static char cl_textbuffer[MAX_TEXTCHANNELS][2048];",
+    "CVAR_DEFINE_AUTO( csga_specbars, \"1\", 0, \"CSGA: 0 = an hai dai den cua GUI spectator (chi dung khi dung clip)\" );\n"
+    "CVAR_DEFINE_AUTO( csga_specname_y, \"0\", 0, \"CSGA: >0 = keo dong ten len vi tri nay (ti le chieu cao); 0 = giu cho cu\" );\n"
+    "static char cl_textbuffer[MAX_TEXTCHANNELS][2048];",
+    "own-specgui-cvars",
+)
+
+patch(
+    "engine/client/cl_game.c",
+    "static void GAME_EXPORT CL_FillRGBABlend( int x, int y, int w, int h, int r, int g, int b, int a )\n"
+    "{\n"
+    "\tfloat x_ = x, y_ = y, w_ = w, h_ = h;\n",
+    "static void GAME_EXPORT CL_FillRGBABlend( int x, int y, int w, int h, int r, int g, int b, int a )\n"
+    "{\n"
+    "\tfloat x_ = x, y_ = y, w_ = w, h_ = h;\n"
+    "\n"
+    "\t/* CSGA: nuot hai dai den cua GUI spectator khi dang xem lai. */\n"
+    "\tif( cls.demoplayback && csga_specbars.value == 0.0f\n"
+    "\t && r == 0 && g == 0 && b == 0 && a == 153\n"
+    "\t && w >= clgame.scrInfo.iWidth / 2\n"
+    "\t && ( y <= 0 || y + h >= clgame.scrInfo.iHeight - 1 ))\n"
+    "\t\treturn;\n",
+    "own-specbars",
+)
+
+patch(
+    "engine/client/cl_game.c",
+    "static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g, int b )\n"
+    "{\n"
+    "\trgba_t color = { r, g, b, 255 };\n",
+    "static int GAME_EXPORT pfnDrawCharacter( int x, int y, int number, int r, int g, int b )\n"
+    "{\n"
+    "\trgba_t color = { r, g, b, 255 };\n"
+    "\n"
+    "\t/* CSGA: keo dong ten nguoi dang bam tu day man hinh len tren. */\n"
+    "\tif( cls.demoplayback && csga_specname_y.value > 0.0f )\n"
+    "\t{\n"
+    "\t\tint H = clgame.scrInfo.iHeight;\n"
+    "\t\tif( H > 0 && y >= (int)( H * 0.86f ) && y <= (int)( H * 0.94f ))\n"
+    "\t\t\ty = (int)( H * csga_specname_y.value );\n"
+    "\t}\n",
+    "own-specname",
+)
+
+# Neo vao dong UPSTREAM, khong neo vao ma do chinh minh sinh ra.
+patch(
+    "engine/client/cl_main.c",
+    "\tCmd_AddCommand (\"democam\", CL_DemoCam_f, \"CSGA: bam nguoi choi khi phat demo\" );",
+    "\t{\n"
+    "\t\textern convar_t csga_specbars, csga_specname_y;\n"
+    "\t\tCvar_RegisterVariable( &csga_specbars );\n"
+    "\t\tCvar_RegisterVariable( &csga_specname_y );\n"
+    "\t}\n"
+    "\tCmd_AddCommand (\"democam\", CL_DemoCam_f, \"CSGA: bam nguoi choi khi phat demo\" );",
+    "own-specgui-reg",
+)
