@@ -47,6 +47,13 @@ RUN python3 /tmp/serverfill.py
 COPY docker/cs-web-server/specmirror.py /tmp/specmirror.py
 RUN python3 /tmp/specmirror.py
 
+# Bay chan doan cho cu KET DUONG GUI (su co 14/8: engine ngung gui cho ca 7 peer
+# cung luc, khach dung hinh 59 giay). Chi dem va in, khong doi hanh vi gi. Xem
+# sendwatch.py — trong do co ca ly le vi sao nghi cho nay VA cho tu mau thuan
+# cua gia thuyet.
+COPY docker/cs-web-server/sendwatch.py /tmp/sendwatch.py
+RUN python3 /tmp/sendwatch.py
+
 RUN ./waf configure -T release -d --enable-openmp && ./waf build
 
 FROM golang:1.25.1 AS go
